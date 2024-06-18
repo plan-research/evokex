@@ -1,3 +1,4 @@
 [submodule "kex"]
 	path = kex
-	url = https://github.com/SBOne-Kenobi/kex.git
+	url = https://github.com/vorpal-research/kex.git
+	branch = evokex-version

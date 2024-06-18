@@ -67,7 +67,7 @@ class ActionSequence2EvosuiteStatements(private val testCase: TestCase) {
             is ActionList -> actionSequence.list.forEach { generateStatementsFromAction(actionSequence, it) }
             is ReflectionList -> actionSequence.list.forEach { generateStatementsFromReflection(actionSequence, it) }
             is TestCall -> generateTestCall(actionSequence)
-            is UnknownSequence -> unreachable("not supported lol")
+            is UnknownSequence, is MockList -> unreachable("not supported lol")
             is PrimaryValue<*>, is StringValue -> {
                 // nothing to generate
             }
@@ -113,7 +113,28 @@ class ActionSequence2EvosuiteStatements(private val testCase: TestCase) {
             is ReflectionNewInstance -> generateReflectionCall(owner, call)
             is ReflectionSetField -> generateReflectionCall(owner, call)
             is ReflectionSetStaticField -> generateReflectionCall(call)
+            is ReflectionGetField -> generateReflectionCall(owner, call)
+            is ReflectionGetStaticField -> generateReflectionCall(owner, call)
         }
+    }
+
+    private fun generateReflectionCall(owner: ReflectionList, call: ReflectionGetStaticField) {
+        generateReflectionGetField(owner, null, call.field)
+    }
+
+    private fun generateReflectionCall(owner: ReflectionList, call: ReflectionGetField) {
+        generateReflectionGetField(owner, call.owner, call.field)
+    }
+
+    private fun generateReflectionGetField(owner: ReflectionList, callOwner: ActionSequence?, field: Field) {
+        val type = field.type.java
+        val callOwnerRef = callOwner?.ref ?: PrimaryValue(null).generateAndGetRef()
+        val method = reflectionUtils.getPrimitiveFieldMap[type.typeName] ?: reflectionUtils.getField
+        val klass = field.klass.java.asConstantValue
+        val name = field.name.asConstantValue
+        val args = listOf(callOwnerRef, klass, name)
+        val ref = owner.createRef(type)
+        +KexReflectionStatement(testCase, method.name, args, ref)
     }
 
     private fun generateReflectionCall(owner: ReflectionList, call: ReflectionArrayWrite) {
