@@ -23,6 +23,7 @@ import org.vorpal.research.kex.launcher.LauncherException
 import org.vorpal.research.kex.launcher.prepareInstrumentedClasspath
 import org.vorpal.research.kex.random.easyrandom.EasyRandomDriver
 import org.vorpal.research.kex.reanimator.codegen.javagen.ReflectionUtilsPrinter
+import org.vorpal.research.kex.trace.symbolic.SymbolicTraceException
 import org.vorpal.research.kex.util.*
 import org.vorpal.research.kfg.ClassManager
 import org.vorpal.research.kfg.KfgConfig
@@ -184,7 +185,11 @@ object KexService {
         return try {
             TestCaseExecutor.getInstance().execute(defaultTestCase)
         } catch (e: Exception) {
-            logger.error("Exception during kex execution: ", e)
+            if (e is SymbolicTraceException && e.cause is TimeoutException) {
+                logger.error("Timeout happened: ", e)
+            } else {
+                logger.error("Exception during kex execution: ", e)
+            }
             null
         } finally {
             TestCaseExecutor.getInstance().executionObservers = originalExecutionObservers
