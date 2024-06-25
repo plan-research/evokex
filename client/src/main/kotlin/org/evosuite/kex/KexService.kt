@@ -185,11 +185,7 @@ object KexService {
         return try {
             TestCaseExecutor.getInstance().execute(defaultTestCase)
         } catch (e: Exception) {
-            if (e is SymbolicTraceException && e.cause is TimeoutException) {
-                logger.error("Timeout happened: ", e)
-            } else {
-                logger.error("Exception during kex execution: ", e)
-            }
+            logger.error("Exception during kex execution: ", e)
             null
         } finally {
             TestCaseExecutor.getInstance().executionObservers = originalExecutionObservers
