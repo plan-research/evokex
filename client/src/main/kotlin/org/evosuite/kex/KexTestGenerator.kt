@@ -205,6 +205,7 @@ class KexTestGenerator {
     }
 
     private fun choosePathClause(chosenTest: TestChromosome): Pair<Int, Int> {
+        if (cache[chosenTest] == null) return -1 to -1
         if (cache[chosenTest]!!.path.path.isEmpty())
             return -1 to -1
         val number = (0 until cache[chosenTest]!!.path.path.size).random()
