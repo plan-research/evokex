@@ -71,9 +71,9 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
     val termCache = mutableMapOf<WrappedValue, Term>()
     val nameCache = mutableMapOf<String, String>()
 
-    val trace get() = collector.symbolicState
+    val state get() = collector.symbolicState
 
-    val result get() = collector.stateBuilder
+    val trace get() = collector.instructionTrace
 
     init {
         collector = enableCollector(executionContext, NameMapperContext()) as SymbolicTraceBuilder

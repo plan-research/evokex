@@ -1,13 +1,9 @@
 package org.evosuite.kex
 
-import kotlinx.collections.immutable.PersistentList
-import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.Contextual
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.InternalSerializationApi
 import org.evosuite.Properties
@@ -16,37 +12,33 @@ import org.evosuite.testcase.DefaultTestCase
 import org.evosuite.testcase.TestCase
 import org.evosuite.testcase.TestChromosome
 import org.evosuite.testcase.statements.PrimitiveStatement
+import org.evosuite.testcase.statements.StringPrimitiveStatement
+import org.evosuite.testcase.statements.numeric.BooleanPrimitiveStatement
+import org.evosuite.testcase.statements.numeric.BytePrimitiveStatement
+import org.evosuite.testcase.statements.numeric.CharPrimitiveStatement
+import org.evosuite.testcase.statements.numeric.DoublePrimitiveStatement
+import org.evosuite.testcase.statements.numeric.FloatPrimitiveStatement
+import org.evosuite.testcase.statements.numeric.IntPrimitiveStatement
+import org.evosuite.testcase.statements.numeric.LongPrimitiveStatement
+import org.evosuite.testcase.statements.numeric.ShortPrimitiveStatement
 import org.slf4j.LoggerFactory
 import org.vorpal.research.kex.asm.analysis.concolic.bfs.BfsPathSelectorImpl
-import org.vorpal.research.kex.asm.analysis.concolic.coverage.CoverageGuidedSelector
-import org.vorpal.research.kex.asm.analysis.concolic.coverage.CoverageGuidedSelectorManager
-import org.vorpal.research.kex.asm.state.PredicateStateAnalysis
-import org.vorpal.research.kex.config.kexConfig
-import org.vorpal.research.kex.descriptor.Descriptor
-import org.vorpal.research.kex.ktype.KexType
-import org.vorpal.research.kex.mocking.performMocking
-import org.vorpal.research.kex.parameters.Parameters
-import org.vorpal.research.kex.parameters.concreteParameters
-import org.vorpal.research.kex.parameters.filterIgnoredStatic
-import org.vorpal.research.kex.parameters.filterStaticFinals
-import org.vorpal.research.kex.reanimator.actionsequence.ActionSequence
-import org.vorpal.research.kex.reanimator.actionsequence.generator.ConcolicSequenceGenerator
-import org.vorpal.research.kex.reanimator.rtUnmapped
-import org.vorpal.research.kex.smt.AsyncChecker
-import org.vorpal.research.kex.smt.Checker
+import org.vorpal.research.kex.descriptor.*
+import org.vorpal.research.kex.ktype.KexChar
+import org.vorpal.research.kex.ktype.asArray
+import org.vorpal.research.kex.smt.InitialDescriptorReanimator
 import org.vorpal.research.kex.smt.SMTModel
-import org.vorpal.research.kex.state.PredicateState
-import org.vorpal.research.kex.state.term.*
-import org.vorpal.research.kex.state.transformer.generateInitialDescriptors
+import org.vorpal.research.kex.state.transformer.DescriptorGenerator
 import org.vorpal.research.kex.trace.symbolic.*
-import org.vorpal.research.kex.trace.symbolic.protocol.SuccessResult
-import org.vorpal.research.kex.util.asmString
+import org.vorpal.research.kex.util.javaString
 import org.vorpal.research.kfg.Package
 import org.vorpal.research.kfg.ir.*
+import org.vorpal.research.kfg.ir.value.instruction.CallInst
 import org.vorpal.research.kfg.ir.value.instruction.Instruction
+import org.vorpal.research.kfg.ir.value.instruction.ReturnInst
 import org.vorpal.research.kthelper.assert.unreachable
+import org.vorpal.research.kthelper.logging.log
 import java.util.*
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @ExperimentalTime
@@ -60,13 +52,10 @@ class KexTestGenerator {
     }
 
     private val ctx get() = KexService.ctx
-    private val pathSelector = CoverageGuidedSelector(
-        CoverageGuidedSelectorManager(
-            ctx, ctx.cm[Properties.TARGET_CLASS.asmString].allMethods
-        )
-    )
-    private val asGenerator = ConcolicSequenceGenerator(ctx, PredicateStateAnalysis(ctx.cm))
     private val cache = WeakHashMap<TestChromosome, SymbolicState>()
+
+    private val Method.isTargetMethod: Boolean
+        get() = klass.fullName.javaString == Properties.TARGET_CLASS
 
     fun collectTraces(testChromosomes: List<TestChromosome>, stoppingCondition: () -> Boolean) {
         runBlocking {
@@ -79,8 +68,8 @@ class KexTestGenerator {
                     val observer = KexTestObserver(ctx)
                     val testCaseClone = test.testCase.clone() as DefaultTestCase
                     KexService.execute(testCaseClone, observer)
-
-                    cache[test] = observer.trace
+                    updateWithTrace(observer.trace, observer.state)
+                    cache[test] = observer.state
                 } catch (e: Throwable) {
                     logger.error("Error occurred while running test:\n{}", test, e)
                 }
@@ -88,8 +77,46 @@ class KexTestGenerator {
         }
     }
 
-    private suspend fun updateWithTrace(trace: List<Instruction>, state: SymbolicState, method: Method) {
-        pathSelector.addExecutionTrace(method, persistentSymbolicState(), SuccessResult(trace, state))
+
+    // TODO: handle throws
+    // TODO: get rid of assumption that every call has return (System.out.println or Object.<init> as example) (or look at if(y.getX() - it generates two calls for getX and only one has return)
+    // TODO: get rid of nested call states and border clauses (compare to version from master)
+    private fun splitState(state: SymbolicState): List<Pair<Method, SymbolicState>> {
+        val stateStarts = mutableListOf<Int>()
+        val res = mutableListOf<Pair<Method, SymbolicState>>()
+        val clauses = state.clauses.toList()
+        for (i in clauses.indices) {
+            if (clauses[i] is PathClause)  continue // Assuming that all necessary calls are already made (I believe it's true but need to ask)
+
+            val instruction = clauses[i].instruction
+            if (instruction is CallInst) {
+                stateStarts.add(i + 1)
+            } else if (instruction is ReturnInst) {
+                if (!(clauses[stateStarts.last() - 1].instruction as CallInst).method.isTargetMethod) {
+                    stateStarts.removeLast()
+                    continue
+                }
+
+                val subsegment = clauses.subList(stateStarts.last(), i + 1)
+                res.add((clauses[stateStarts.last() - 1].instruction as CallInst).method to
+                    PersistentSymbolicState(
+                        PersistentClauseList(subsegment.toPersistentList()),
+                        PersistentPathCondition(subsegment.filterIsInstance<PathClause>().toPersistentList()),
+                        state.concreteTypes.toPersistentMap(),
+                        state.concreteValues.toPersistentMap(),
+                        state.termMap.toPersistentMap()
+                    ))
+                stateStarts.removeLast()
+            }
+        }
+        return res
+    }
+
+    private suspend fun updateWithTrace(trace: List<Instruction>, state: SymbolicState) {
+        val statesForMethod = splitState(state)
+        for ((method, methodState) in statesForMethod) {
+            // clauseSelector.addExecutionTrace(method, persistentSymbolicState(), SuccessResult(trace, methodState))
+        }
     }
 
     fun generateTest(): TestCase? = runBlocking {
@@ -124,73 +151,74 @@ class KexTestGenerator {
         logger.debug("Kex produce new test:\n{}", it)
     }
 
-    private fun findNext(assignments: Map<Term, Term>, previous: String? = null): Term? {
-        var flag = previous == null
-        for ((key, _) in assignments) {
-            if (!key.name.contains("primitive")) {
-                continue
-            }
-            if (key.name == previous) {
-                flag = true
-                continue
-            }
-            if (flag) {
-                return key
-            }
-        }
-        return null
-    }
+    private fun buildPrimitiveTermList(result: SMTModel) =
+        result.assignments.keys.filter { term -> term.name.contains("primitive") }.sortedBy { term -> term.name }
 
     private fun generateTest(oldTest: TestCase, result: SMTModel): TestCase? {
+        val primitiveTerms = buildPrimitiveTermList(result)
+        if (primitiveTerms.isEmpty()) return null
+
         var isTestChanged = false
         val newTest = DefaultTestCase()
-        var curPrimitiveName = findNext(result.assignments)
+        var indexOfCurrentPrimitiveTerm = 0
+
+        val descriptorGenerator = DescriptorGenerator(buildMethod(), ctx, result, InitialDescriptorReanimator(result, ctx))
+        descriptorGenerator.generateAll()
+
         for (s in oldTest) {
-            if (curPrimitiveName == null) {
-                return null
-            }
             if (s is PrimitiveStatement<*>) {
+                if (indexOfCurrentPrimitiveTerm == primitiveTerms.size) {
+                    return null
+                }
                 isTestChanged = true
-                when (result.assignments[curPrimitiveName]) {
-                    is ConstIntTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstIntTerm).value
+                when (s) {
+                    is IntPrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Int).value
                     }
 
-                    is ConstLongTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstLongTerm).value
+                    is LongPrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Long).value
                     }
 
-                    is ConstFloatTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstFloatTerm).value
+                    is FloatPrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Float).value
                     }
 
-                    is ConstDoubleTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstDoubleTerm).value
+                    is DoublePrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Double).value
                     }
 
-                    is ConstStringTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstStringTerm).value
+                    is StringPrimitiveStatement -> {
+                        s.value = descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]!!.asStringValue
                     }
 
-                    is ConstShortTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstShortTerm).value
+                    is ShortPrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Short).value
                     }
 
-                    is ConstByteTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstByteTerm).value
+                    is BytePrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Byte).value
                     }
 
-                    is ConstCharTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstCharTerm).value
+                    is CharPrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Char).value
                     }
 
-                    is ConstBoolTerm -> {
-                        s.value = (result.assignments[curPrimitiveName] as ConstBoolTerm).value
+                    is BooleanPrimitiveStatement -> {
+                        s.value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
+                                as ConstantDescriptor.Bool).value
                     }
 
                     else -> unreachable {}
                 }
-                curPrimitiveName = findNext(result.assignments, curPrimitiveName?.name)
+                indexOfCurrentPrimitiveTerm++
             }
             newTest.addStatement(s)
         }
@@ -201,11 +229,14 @@ class KexTestGenerator {
     }
 
     private fun chooseTestCase(): TestChromosome {
-        return cache.keys.random()
+        var chosenTest: TestChromosome
+        do {
+            chosenTest = cache.keys.random()
+        } while (cache[chosenTest] == null)
+        return chosenTest
     }
 
     private fun choosePathClause(chosenTest: TestChromosome): Pair<Int, Int> {
-        if (cache[chosenTest] == null) return -1 to -1
         if (cache[chosenTest]!!.path.path.isEmpty())
             return -1 to -1
         val number = (0 until cache[chosenTest]!!.path.path.size).random()
@@ -227,4 +258,18 @@ class KexTestGenerator {
         val testDescriptor = MethodDescriptor(emptyList(), cm.type.voidType)
         return Method(cm, klass, "name", testDescriptor)
     }
+
+    val Descriptor.asStringValue: String?
+        get() = (this as? ObjectDescriptor)?.let { obj ->
+            val valueDescriptor = obj["value", KexChar.asArray()] as? ArrayDescriptor
+            valueDescriptor?.let { array ->
+                (0 until array.length).map {
+                    when (val value = array.elements.getOrDefault(it, descriptor { const(' ') })) {
+                        is ConstantDescriptor.Char -> value.value
+                        is ConstantDescriptor.Byte -> value.value.toInt().toChar()
+                        else -> unreachable { log.error("Unexpected element type in string: $value") }
+                    }
+                }.joinToString("")
+            }
+        }
 }
