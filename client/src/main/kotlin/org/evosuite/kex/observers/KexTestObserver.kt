@@ -75,6 +75,9 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
 
     val trace get() = collector.instructionTrace
 
+    val callTraces = mutableListOf<List<Instruction>>()
+    private var index = -1
+
     init {
         collector = enableCollector(executionContext, NameMapperContext()) as SymbolicTraceBuilder
         emptyCollector = initializeEmptyCollector()
@@ -137,6 +140,8 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
         postProcess(newInst, predicate)
 
         collector.lastCall = buildCall(constructor, null, mkValue(statement.returnValue), args, scope)
+
+        index = trace.size
     }
 
     override fun beforeMethod(statement: MethodStatement, scope: Scope) {
@@ -145,6 +150,8 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
         val args = statement.parameterReferences.map { mkValue(it) }
 
         collector.lastCall = buildCall(method, statement.returnValue, callee, args, scope)
+
+        index = trace.size
     }
 
     private fun buildCall(
@@ -419,6 +426,11 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
     }.also { termCache[value] = it }
 
     override fun afterStatement(statement: Statement, scope: Scope, exception: Throwable?) {
+        if (statement is MethodStatement || statement is ConstructorStatement) {
+            callTraces.add(trace.takeLast(trace.size - index))
+            index = -1
+        }
+
         setCurrentCollector(emptyCollector)
 
         collector.lastCall?.let {

@@ -30,6 +30,7 @@ import org.vorpal.research.kex.smt.InitialDescriptorReanimator
 import org.vorpal.research.kex.smt.SMTModel
 import org.vorpal.research.kex.state.transformer.DescriptorGenerator
 import org.vorpal.research.kex.trace.symbolic.*
+import org.vorpal.research.kex.util.asmString
 import org.vorpal.research.kex.util.javaString
 import org.vorpal.research.kfg.Package
 import org.vorpal.research.kfg.ir.*
@@ -53,6 +54,7 @@ class KexTestGenerator {
 
     private val ctx get() = KexService.ctx
     private val cache = WeakHashMap<TestChromosome, SymbolicState>()
+    private val clauseSelector = ScoreGuidedClauseSelector(ctx.cm[Properties.TARGET_CLASS.asmString].allMethods, ctx)
 
     private val Method.isTargetMethod: Boolean
         get() = klass.fullName.javaString == Properties.TARGET_CLASS
@@ -68,7 +70,7 @@ class KexTestGenerator {
                     val observer = KexTestObserver(ctx)
                     val testCaseClone = test.testCase.clone() as DefaultTestCase
                     KexService.execute(testCaseClone, observer)
-                    updateWithTrace(observer.trace, observer.state)
+                    updateWithTrace(observer.callTraces)
                     cache[test] = observer.state
                 } catch (e: Throwable) {
                     logger.error("Error occurred while running test:\n{}", test, e)
@@ -77,63 +79,22 @@ class KexTestGenerator {
         }
     }
 
-
-    // TODO: handle throws
-    // TODO: get rid of assumption that every call has return (System.out.println or Object.<init> as example) (or look at if(y.getX() - it generates two calls for getX and only one has return)
-    // TODO: get rid of nested call states and border clauses (compare to version from master)
-    private fun splitState(state: SymbolicState): List<Pair<Method, SymbolicState>> {
-        val stateStarts = mutableListOf<Int>()
-        val res = mutableListOf<Pair<Method, SymbolicState>>()
-        val clauses = state.clauses.toList()
-        for (i in clauses.indices) {
-            if (clauses[i] is PathClause)  continue // Assuming that all necessary calls are already made (I believe it's true but need to ask)
-
-            val instruction = clauses[i].instruction
-            if (instruction is CallInst) {
-                stateStarts.add(i + 1)
-            } else if (instruction is ReturnInst) {
-                if (!(clauses[stateStarts.last() - 1].instruction as CallInst).method.isTargetMethod) {
-                    stateStarts.removeLast()
-                    continue
-                }
-
-                val subsegment = clauses.subList(stateStarts.last(), i + 1)
-                res.add((clauses[stateStarts.last() - 1].instruction as CallInst).method to
-                    PersistentSymbolicState(
-                        PersistentClauseList(subsegment.toPersistentList()),
-                        PersistentPathCondition(subsegment.filterIsInstance<PathClause>().toPersistentList()),
-                        state.concreteTypes.toPersistentMap(),
-                        state.concreteValues.toPersistentMap(),
-                        state.termMap.toPersistentMap()
-                    ))
-                stateStarts.removeLast()
-            }
-        }
-        return res
-    }
-
-    private suspend fun updateWithTrace(trace: List<Instruction>, state: SymbolicState) {
-        val statesForMethod = splitState(state)
-        for ((method, methodState) in statesForMethod) {
-            // clauseSelector.addExecutionTrace(method, persistentSymbolicState(), SuccessResult(trace, methodState))
+    private suspend fun updateWithTrace(callTraces: List<List<Instruction>>) {
+        for (trace in callTraces) {
+            if (!trace.first().parent.method.isTargetMethod) continue
+            clauseSelector.addExecutionTrace(trace)
         }
     }
 
     fun generateTest(): TestCase? = runBlocking {
         logger.info("Generating test with kex")
 
-        val mth = buildMethod()
-        var chosenTest: TestChromosome
-        var chosenPathClauseIndex: Pair<Int, Int>
-        do {
-            chosenTest = chooseTestCase()
-            chosenPathClauseIndex = choosePathClause(chosenTest)
-        } while(chosenPathClauseIndex.first == -1)
-
+        val chosenTest = chooseTestCase()
         val prevState = cache[chosenTest]!!
-        val clauseList = prevState.clauses.take(chosenPathClauseIndex.first).toMutableList()
-        val pathList = prevState.path.take(chosenPathClauseIndex.second).toMutableList()
-        val reversed = BfsPathSelectorImpl(ctx, mth).reverse(pathList.last())!!
+        clauseSelector.setState(prevState.clauses.state, prevState.path.path)
+        val (clauseList, pathList) = clauseSelector.next()
+
+        val reversed = clauseSelector.reverse(pathList.last())!!
         clauseList[clauseList.size - 1] = reversed
         pathList[pathList.size - 1] = reversed
 
@@ -232,24 +193,8 @@ class KexTestGenerator {
         var chosenTest: TestChromosome
         do {
             chosenTest = cache.keys.random()
-        } while (cache[chosenTest] == null)
+        } while (cache[chosenTest] == null || cache[chosenTest]!!.path.path.isEmpty())
         return chosenTest
-    }
-
-    private fun choosePathClause(chosenTest: TestChromosome): Pair<Int, Int> {
-        if (cache[chosenTest]!!.path.path.isEmpty())
-            return -1 to -1
-        val number = (0 until cache[chosenTest]!!.path.path.size).random()
-        var counter = 0
-        for (i in 0 until cache[chosenTest]!!.clauses.state.size) {
-            if (cache[chosenTest]!!.clauses.state[i] is PathClause) {
-                if (counter == number) {
-                    return i + 1 to number + 1
-                }
-                counter += 1
-            }
-        }
-        return -1 to -1
     }
 
     private fun buildMethod(): Method {
