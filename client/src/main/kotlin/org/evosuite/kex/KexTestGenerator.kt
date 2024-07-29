@@ -78,6 +78,9 @@ class KexTestGenerator {
 
     private suspend fun updateWithTrace(callTraces: List<List<Instruction>>) {
         for (trace in callTraces) {
+            if(trace.isEmpty()) {
+                continue
+            }
             if (!trace.first().parent.method.isTargetMethod) continue
             clauseSelector.addExecutionTrace(trace)
         }
@@ -90,6 +93,9 @@ class KexTestGenerator {
         val prevState = cache[chosenTest]!!
         clauseSelector.setState(prevState.clauses.state, prevState.path.path)
         val (clauseList, pathList) = clauseSelector.next()
+        if (clauseList == null || pathList == null) {
+            return@runBlocking null
+        }
 
         val reversed = clauseSelector.reverse(pathList.last())!!
         clauseList[clauseList.size - 1] = reversed

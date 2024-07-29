@@ -6,7 +6,7 @@ import org.vorpal.research.kex.trace.symbolic.PathClause
 import org.vorpal.research.kfg.ir.Method
 import org.vorpal.research.kfg.ir.value.instruction.Instruction
 
-interface ClauseSelector : SuspendableIterator<Pair<List<Clause>, List<PathClause>>> {
+interface ClauseSelector : SuspendableIterator<Pair<List<Clause>?, List<PathClause>?>> {
     val targets: Set<Method>
 
     suspend fun isEmpty(): Boolean

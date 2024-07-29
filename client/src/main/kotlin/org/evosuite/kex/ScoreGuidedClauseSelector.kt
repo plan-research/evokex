@@ -3,8 +3,6 @@ package org.evosuite.kex
 import kotlinx.collections.immutable.toPersistentList
 import org.vorpal.research.kex.ExecutionContext
 import org.vorpal.research.kex.asm.analysis.concolic.bfs.BfsPathSelectorImpl
-import org.vorpal.research.kex.asm.analysis.concolic.coverage.ExecutionGraph.Companion.DEFAULT_SCORE
-import org.vorpal.research.kex.asm.analysis.concolic.coverage.ExecutionGraph.Companion.SIGMA
 import org.vorpal.research.kex.asm.analysis.concolic.coverage.InstructionGraph
 import org.vorpal.research.kex.trace.symbolic.Clause
 import org.vorpal.research.kex.trace.symbolic.PathClause
@@ -17,8 +15,6 @@ import org.vorpal.research.kfg.ir.value.instruction.CallInst
 import org.vorpal.research.kfg.ir.value.instruction.CatchInst
 import org.vorpal.research.kfg.ir.value.instruction.Instruction
 import org.vorpal.research.kfg.ir.value.instruction.ReturnInst
-import kotlin.math.exp
-import kotlin.math.pow
 
 class ScoreGuidedClauseSelector(
     override val targets: Set<Method>,
@@ -36,7 +32,8 @@ class ScoreGuidedClauseSelector(
 
     override suspend fun hasNext(): Boolean = !isEmpty()
 
-    override suspend fun next(): Pair<MutableList<Clause>, MutableList<PathClause>> {
+    override suspend fun next(): Pair<MutableList<Clause>?, MutableList<PathClause>?> {
+        if (isEmpty()) return null to null
         val candidate = candidates.first()
         candidates.remove(candidate)
         return clauses.take(candidate.first + 1).toMutableList() to path.take(candidate.second + 1).toMutableList()
@@ -93,14 +90,12 @@ class ScoreGuidedClauseSelector(
         }
         assert(pathIndex == path.size)
 
-        candidates.sortBy { (_, pathIndex) ->
-            val scaleDistance = { distance: Int ->
-                val normalizedDistance = exp(-0.5 * (distance.toDouble() / SIGMA).pow(2))
-                (normalizedDistance * DEFAULT_SCORE).toLong()
-            }
+        candidates.sortBy /*TODO: or by descending?*/ { (_, pathIndex) ->
 
-            scaleDistance(instructionGraph.getVertex(path[pathIndex].instruction).
-                distanceToUncovered(targets, stackTraces[pathIndex].toPersistentList()).second)
+            val distance = instructionGraph.getVertex(path[pathIndex].instruction).
+                distanceToUncovered(targets, stackTraces[pathIndex].toPersistentList()).second
+
+            distance
         }
     }
 

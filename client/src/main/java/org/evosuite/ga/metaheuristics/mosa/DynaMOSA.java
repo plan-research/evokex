@@ -97,8 +97,10 @@ public class DynaMOSA extends AbstractMOSA {
 			logger.info("Run test generation using kex");
 			wasTargeted = true;
 			long startTime = System.currentTimeMillis();
-			List<TestChromosome> solutions = getSolutions();
 			statLogger.debug("Tests generated up to this moment: {}", allTests.size());
+			if (allTests.isEmpty()) {
+				allTests.addAll(getSolutions());
+			}
 			kexTestGenerator.collectTraces(
 					allTests,
 					() -> false
