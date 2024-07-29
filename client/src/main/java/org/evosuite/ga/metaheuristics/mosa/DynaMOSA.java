@@ -60,6 +60,8 @@ public class DynaMOSA extends AbstractMOSA {
 	private final long kexGenerationTimeout = 5000;
 	private KexTestGenerator kexTestGenerator;
 
+	private final List<TestChromosome> allTests = new ArrayList<>();
+
 	/**
 	 * Constructor based on the abstract class {@link AbstractMOSA}.
 	 *
@@ -96,9 +98,9 @@ public class DynaMOSA extends AbstractMOSA {
 			wasTargeted = true;
 			long startTime = System.currentTimeMillis();
 			List<TestChromosome> solutions = getSolutions();
-			statLogger.debug("Current solutions: {}", solutions.size());
+			statLogger.debug("Tests generated up to this moment: {}", allTests.size());
 			kexTestGenerator.collectTraces(
-					solutions,
+					allTests,
 					() -> false
 			);
 			long endExecutionTime = System.currentTimeMillis();
@@ -122,6 +124,8 @@ public class DynaMOSA extends AbstractMOSA {
 
 		// Generate offspring, compute their fitness, update the archive and coverage goals.
 		List<TestChromosome> offspringPopulation = this.breedNextGeneration();
+		allTests.addAll(offspringPopulation);
+		allTests.addAll(additional);
 
 		// Create the union of parents and offspring
 		List<TestChromosome> union = new ArrayList<>(additional.size() + this.population.size() + offspringPopulation.size());
