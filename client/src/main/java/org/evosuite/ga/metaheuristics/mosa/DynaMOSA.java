@@ -75,8 +75,10 @@ public class DynaMOSA extends AbstractMOSA {
 		List<TestChromosome> res = new ArrayList<>();
 		logger.info("Start generation");
 		int i = 0;
+		Function0<Boolean> stoppingCondition =
+				() -> System.currentTimeMillis() - time > kexGenerationTimeout && false;
 		while (maxGenerateTests == -1 || i < maxGenerateTests) {
-			TestCase testCase = kexTestGenerator.generateTest();
+			TestCase testCase = kexTestGenerator.generateTest(stoppingCondition);
 			if (testCase != null) {
 				TestChromosome test = new TestChromosome();
 				test.setTestCase(testCase);

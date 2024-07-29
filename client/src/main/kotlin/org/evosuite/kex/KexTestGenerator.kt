@@ -86,31 +86,34 @@ class KexTestGenerator {
         }
     }
 
-    fun generateTest(): TestCase? = runBlocking {
+    fun generateTest(stoppingCondition: () -> Boolean): TestCase? = runBlocking {
         logger.info("Generating test with kex")
+        while (!stoppingCondition()) {
+            val chosenTest = chooseTestCase()
+            val prevState = cache[chosenTest]!!
+            clauseSelector.setState(prevState.clauses.state, prevState.path.path)
+            val (clauseList, pathList) = clauseSelector.next()
+            if (clauseList == null || pathList == null) {
+                continue
+            }
 
-        val chosenTest = chooseTestCase()
-        val prevState = cache[chosenTest]!!
-        clauseSelector.setState(prevState.clauses.state, prevState.path.path)
-        val (clauseList, pathList) = clauseSelector.next()
-        if (clauseList == null || pathList == null) {
-            return@runBlocking null
+            val reversed = clauseSelector.reverse(pathList.last()) ?: continue
+            clauseList[clauseList.size - 1] = reversed
+            pathList[pathList.size - 1] = reversed
+
+            val state = PersistentSymbolicState(
+                PersistentClauseList(clauseList.toPersistentList()),
+                PersistentPathCondition(pathList.toPersistentList()),
+                prevState.concreteTypes.toPersistentMap(),
+                prevState.concreteValues.toPersistentMap(),
+                prevState.termMap.toPersistentMap()
+            )
+
+            val result = state.check(ctx) ?: continue
+            return@runBlocking generateTest(chosenTest.testCase, result)
         }
-
-        val reversed = clauseSelector.reverse(pathList.last())!!
-        clauseList[clauseList.size - 1] = reversed
-        pathList[pathList.size - 1] = reversed
-
-        val state = PersistentSymbolicState(
-            PersistentClauseList(clauseList.toPersistentList()),
-            PersistentPathCondition(pathList.toPersistentList()),
-            prevState.concreteTypes.toPersistentMap(),
-            prevState.concreteValues.toPersistentMap(),
-            prevState.termMap.toPersistentMap()
-        )
-
-        val result = state.check(ctx) ?: return@runBlocking null
-        return@runBlocking generateTest(chosenTest.testCase, result)
+        logger.info("Unsuccessful in the test generation")
+        null
     }.also {
         logger.debug("Kex produce new test:\n{}", it)
     }
