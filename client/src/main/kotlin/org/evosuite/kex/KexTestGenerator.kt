@@ -22,7 +22,6 @@ import org.evosuite.testcase.statements.numeric.IntPrimitiveStatement
 import org.evosuite.testcase.statements.numeric.LongPrimitiveStatement
 import org.evosuite.testcase.statements.numeric.ShortPrimitiveStatement
 import org.slf4j.LoggerFactory
-import org.vorpal.research.kex.asm.analysis.concolic.bfs.BfsPathSelectorImpl
 import org.vorpal.research.kex.descriptor.*
 import org.vorpal.research.kex.ktype.KexChar
 import org.vorpal.research.kex.ktype.asArray
@@ -34,9 +33,7 @@ import org.vorpal.research.kex.util.asmString
 import org.vorpal.research.kex.util.javaString
 import org.vorpal.research.kfg.Package
 import org.vorpal.research.kfg.ir.*
-import org.vorpal.research.kfg.ir.value.instruction.CallInst
 import org.vorpal.research.kfg.ir.value.instruction.Instruction
-import org.vorpal.research.kfg.ir.value.instruction.ReturnInst
 import org.vorpal.research.kthelper.assert.unreachable
 import org.vorpal.research.kthelper.logging.log
 import java.util.*
