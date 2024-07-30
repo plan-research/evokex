@@ -88,7 +88,7 @@ class KexTestGenerator {
 
     fun generateTest(stoppingCondition: () -> Boolean): TestCase? = runBlocking {
         logger.info("Generating test with kex")
-        while (!stoppingCondition()) {
+        while (clauseSelector.hasNext() && !stoppingCondition()) {
             val chosenTest = chooseTestCase()
             val prevState = cache[chosenTest]!!
             clauseSelector.setState(prevState.clauses.state, prevState.path.path)
