@@ -19,6 +19,7 @@
  */
 package org.evosuite.testcase;
 
+import kotlin.jvm.functions.Function0;
 import org.evosuite.Properties;
 import org.evosuite.coverage.mutation.Mutation;
 import org.evosuite.coverage.mutation.MutationExecutionResult;
@@ -26,6 +27,7 @@ import org.evosuite.ga.ConstructionFailedException;
 import org.evosuite.ga.SecondaryObjective;
 import org.evosuite.ga.localsearch.LocalSearchObjective;
 import org.evosuite.ga.operators.mutation.MutationHistory;
+import org.evosuite.kex.KexTestGenerator;
 import org.evosuite.runtime.util.AtMostOnceLogger;
 import org.evosuite.setup.TestCluster;
 import org.evosuite.symbolic.BranchCondition;
@@ -548,32 +550,12 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	 */
 	private boolean mutationConcolic() {
 		logger.info("Applying DSE mutation");
-		// concolicExecution = new ConcolicExecution();
+		long currentTime = System.currentTimeMillis();
+		long kexGenerationTimeout = 5000;
+		Function0<Boolean> stoppingCondition = () -> System.currentTimeMillis() - currentTime > kexGenerationTimeout;
+		// TODO: do we need it? Evosuite didn't use it
 
-		// Apply DSE to gather constraints
-		List<BranchCondition> branches = ConcolicExecution.getSymbolicPath(this);
-		logger.debug("Conditions: " + branches);
-		if (branches.isEmpty())
-			return false;
-
-		boolean mutated = false;
-
-		List<BranchCondition> targetBranches = branches.stream()
-				.filter(b -> TestCluster.isTargetClassName(b.getClassName()))
-				.collect(toCollection(ArrayList::new));
-
-		// Select random branch
-		List<BranchCondition> bs = targetBranches.isEmpty() ? branches : targetBranches;
-		BranchCondition branch =  Randomness.choice(bs);
-
-		logger.debug("Trying to negate branch " + branch.getInstructionIndex()
-		        + " - have " + targetBranches.size() + "/" + branches.size()
-		        + " target branches");
-
-		// Try to solve negated constraint
-		TestCase newTest = ConcolicMutation.negateCondition(branches, branch, test);
-
-		// If successful, add resulting test to test suite
+		TestCase newTest = KexTestGenerator.Companion.generateTest(this, stoppingCondition);
 		if (newTest != null) {
 			logger.debug("CONCOLIC: Created new test");
 			// logger.info(newTest.toCode());
@@ -586,7 +568,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 			logger.debug("CONCOLIC: Did not create new test");
 		}
 
-		return mutated;
+		return newTest != null;
 	}
 
 	/**

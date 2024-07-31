@@ -58,9 +58,6 @@ public class DynaMOSA extends AbstractMOSA {
 	private final int maxGenerateTests = 5;
 	private final long kexExecutionTimeout = 5000;
 	private final long kexGenerationTimeout = 5000;
-	private KexTestGenerator kexTestGenerator;
-
-	private final List<TestChromosome> allTests = new ArrayList<>();
 
 	/**
 	 * Constructor based on the abstract class {@link AbstractMOSA}.
@@ -71,69 +68,19 @@ public class DynaMOSA extends AbstractMOSA {
 		super(factory);
 	}
 
-	private List<TestChromosome> generateTests(long time) {
-		List<TestChromosome> res = new ArrayList<>();
-		logger.info("Start generation");
-		int i = 0;
-		Function0<Boolean> stoppingCondition =
-				() -> System.currentTimeMillis() - time > kexGenerationTimeout && false;
-		while (maxGenerateTests == -1 || i < maxGenerateTests) {
-			TestCase testCase = kexTestGenerator.generateTest(stoppingCondition);
-			if (testCase != null) {
-				TestChromosome test = new TestChromosome();
-				test.setTestCase(testCase);
-				res.add(test);
-				calculateFitness(test);
-				logger.debug("Covered goals: {}", testCase.getCoveredGoals().size());
-			}
-			i++;
-		}
-		return res;
-	}
-
 	/** {@inheritDoc} */
 	@Override
 	protected void evolve() {
-		List<TestChromosome> additional = Collections.emptyList();
-		if (true) {
-			logger.info("Run test generation using kex");
-			wasTargeted = true;
-			long startTime = System.currentTimeMillis();
-			statLogger.debug("Tests generated up to this moment: {}", allTests.size());
-			if (allTests.isEmpty()) {
-				allTests.addAll(getSolutions());
-			}
-			kexTestGenerator.collectTraces(
-					allTests,
-					() -> false
-			);
-			long endExecutionTime = System.currentTimeMillis();
-
-			logger.info("Start generating tests");
-			additional = generateTests(endExecutionTime);
-
-			long endTime = System.currentTimeMillis();
-			statLogger.debug("Test cases generated: {}", additional.size());
-			statLogger.debug("Kex generation time: {}", endTime - endExecutionTime);
-			statLogger.debug("Kex iteration time: {}", endTime - startTime);
-
-			if (additional.isEmpty()) {
-				return;
-			}
-
-			List<TestChromosome> temp = additional;
-			additional = this.population;
-			this.population = temp;
-		}
-
 		// Generate offspring, compute their fitness, update the archive and coverage goals.
 		List<TestChromosome> offspringPopulation = this.breedNextGeneration();
-		allTests.addAll(offspringPopulation);
-		allTests.addAll(additional);
+		long currentTime = System.currentTimeMillis();
+		KexTestGenerator.Companion.collectTraces(
+				offspringPopulation,
+				() -> System.currentTimeMillis() - currentTime > kexExecutionTimeout || false
+		);
 
 		// Create the union of parents and offspring
-		List<TestChromosome> union = new ArrayList<>(additional.size() + this.population.size() + offspringPopulation.size());
-		union.addAll(additional);
+		List<TestChromosome> union = new ArrayList<>(this.population.size() + offspringPopulation.size());
 		union.addAll(this.population);
 		union.addAll(offspringPopulation);
 
@@ -239,7 +186,6 @@ public class DynaMOSA extends AbstractMOSA {
 		int iterations = 0;
 		int kexIterations = 0;
 		int kexImproveIterations = 0;
-		kexTestGenerator = new KexTestGenerator();
 		while (!isFinished() && getNumberOfUncoveredGoals() > 0) {
 			wasTargeted = false;
 			long oldCoverage = getLineCoverage();
