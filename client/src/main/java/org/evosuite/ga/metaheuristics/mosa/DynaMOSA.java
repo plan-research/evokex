@@ -19,7 +19,6 @@
  */
 package org.evosuite.ga.metaheuristics.mosa;
 
-import kotlin.jvm.functions.Function0;
 import org.evosuite.Properties;
 import org.evosuite.coverage.line.LineCoverageTestFitness;
 import org.evosuite.ga.ChromosomeFactory;
@@ -52,12 +51,7 @@ public class DynaMOSA extends AbstractMOSA {
 
 	protected CrowdingDistance<TestChromosome> distance = new CrowdingDistance<>();
 
-	private int stallLen;
-	private int maxStallLen = 32;
 	private boolean wasTargeted;
-	private final int maxGenerateTests = 5;
-	private final long kexExecutionTimeout = 5000;
-	private final long kexGenerationTimeout = 5000;
 
 	/**
 	 * Constructor based on the abstract class {@link AbstractMOSA}.
@@ -74,9 +68,9 @@ public class DynaMOSA extends AbstractMOSA {
 		// Generate offspring, compute their fitness, update the archive and coverage goals.
 		List<TestChromosome> offspringPopulation = this.breedNextGeneration();
 		long currentTime = System.currentTimeMillis();
-		KexTestGenerator.Companion.collectTraces(
+		KexTestGenerator.INSTANCE.collectTraces(
 				offspringPopulation,
-				() -> System.currentTimeMillis() - currentTime > kexExecutionTimeout || false
+				() -> System.currentTimeMillis() - currentTime > KexTestGenerator.KEX_EXECUTION_TIMEOUT
 		);
 
 		// Create the union of parents and offspring
@@ -166,6 +160,11 @@ public class DynaMOSA extends AbstractMOSA {
 			// Initialize the population by creating solutions at random.
 			this.initializePopulation();
 		}
+		long currentTime = System.currentTimeMillis();
+		KexTestGenerator.INSTANCE.collectTraces(
+				this.population,
+				() -> System.currentTimeMillis() - currentTime > KexTestGenerator.KEX_EXECUTION_TIMEOUT
+		);
 
 		// Compute the fitness for each population member, update the coverage information and the
 		// set of goals to cover. Finally, update the archive.
@@ -181,7 +180,6 @@ public class DynaMOSA extends AbstractMOSA {
 
 		// Evolve the population generation by generation until all gaols have been covered or the
 		// search budget has been consumed.
-		stallLen = 0;
 		long startTime = System.currentTimeMillis();
 		int iterations = 0;
 		int kexIterations = 0;
@@ -208,17 +206,6 @@ public class DynaMOSA extends AbstractMOSA {
 				} else {
 					statLogger.debug("Dump kex iteration");
 				}
-			}
-
-			if (oldCoverage == newCoverage) {
-				if (wasTargeted) {
-//					maxGenerateTests *= 2;
-					maxStallLen *= 2;
-				} else {
-					stallLen++;
-				}
-			} else {
-				stallLen = 0;
 			}
 
 			iterations++;

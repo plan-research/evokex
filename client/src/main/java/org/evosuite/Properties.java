@@ -1277,7 +1277,7 @@ public class Properties {
 	@Parameter(key = "seed_dir", group = "Output", description = "Directory name where the best chromosomes are saved")
 	public static String SEED_DIR = "evosuite-seeds";
 
-	@Parameter(key = "concolic_mutation", description = "Deprecated. Probability of using concolic mutation operator")
+	@Parameter(key = "concolic_mutation", description = "Probability of using concolic mutation operator")
 	@DoubleValue(min = 0.0, max = 1.0)
 	public static double CONCOLIC_MUTATION = 1.0;
 

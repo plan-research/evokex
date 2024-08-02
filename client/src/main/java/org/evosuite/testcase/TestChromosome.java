@@ -551,11 +551,10 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	private boolean mutationConcolic() {
 		logger.info("Applying DSE mutation");
 		long currentTime = System.currentTimeMillis();
-		long kexGenerationTimeout = 5000;
-		Function0<Boolean> stoppingCondition = () -> System.currentTimeMillis() - currentTime > kexGenerationTimeout;
-		// TODO: do we need it? Evosuite didn't use it
+		Function0<Boolean> stoppingCondition = () -> System.currentTimeMillis() - currentTime >
+				KexTestGenerator.KEX_GENERATION_TIMEOUT;
 
-		TestCase newTest = KexTestGenerator.Companion.generateTest(this, stoppingCondition);
+		TestCase newTest = KexTestGenerator.INSTANCE.generateTest(this, stoppingCondition);
 		if (newTest != null) {
 			logger.debug("CONCOLIC: Created new test");
 			// logger.info(newTest.toCode());

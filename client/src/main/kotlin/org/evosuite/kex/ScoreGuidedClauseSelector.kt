@@ -90,10 +90,10 @@ class ScoreGuidedClauseSelector(
         }
         assert(pathIndex == path.size)
 
-        candidates.sortBy /*TODO: or by descending?*/ { (_, pathIndex) ->
+        candidates.sortBy { (_, pathIndex) ->
 
             val distance = instructionGraph.getVertex(path[pathIndex].instruction).
-                distanceToUncovered(targets, stackTraces[pathIndex].toPersistentList()).second
+                distanceToUncovered(targets, stackTraces[pathIndex].toPersistentList()).first
 
             distance
         }
