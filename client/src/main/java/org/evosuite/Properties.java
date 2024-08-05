@@ -1279,7 +1279,7 @@ public class Properties {
 
 	@Parameter(key = "concolic_mutation", description = "Probability of using concolic mutation operator")
 	@DoubleValue(min = 0.0, max = 1.0)
-	public static double CONCOLIC_MUTATION = 1.0;
+	public static double CONCOLIC_MUTATION =0.5;
 
 	@Parameter(key = "constraint_solution_attempts", description = "Number of attempts to solve constraints related to one code branch")
 	public static int CONSTRAINT_SOLUTION_ATTEMPTS = 3;

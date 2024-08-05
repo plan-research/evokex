@@ -300,7 +300,7 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
 
     override fun beforePrimitive(statement: PrimitiveStatement<*>, scope: Scope) {
         when (statement) {
-            is EnumPrimitiveStatement<*> -> TODO()
+            is EnumPrimitiveStatement<*> ->  super.beforePrimitive(statement, scope) // TODO
             is EnvironmentDataStatement<*> -> TODO("need more research here")
             else -> {
                 val value = buildValue(statement.value, statement.returnClass)
