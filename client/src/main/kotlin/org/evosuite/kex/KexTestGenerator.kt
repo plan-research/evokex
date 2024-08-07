@@ -53,6 +53,8 @@ object KexTestGenerator {
     const val KEX_GENERATION_TIMEOUT = 5000
     const val KEX_EXECUTION_TIMEOUT = 5000
 
+    fun isCollected(testChromosome: TestChromosome) = testChromosome.testCase.toCode() in cache
+
     fun collectTraces(testChromosomes: List<TestChromosome>, stoppingCondition: () -> Boolean) {
         runBlocking {
             logger.info("Trace collection")

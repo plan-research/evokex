@@ -67,6 +67,21 @@ import static java.util.stream.Collectors.toCollection;
  */
 public final class TestChromosome extends AbstractTestChromosome<TestChromosome>  {
 
+	public static int numberOfMutations = 0;
+	public static int numberOfUnchanged = 0;
+	public static int numberOfTimeouts = 0;
+	public static int numberOfConcolic = 0;
+	public static int numberOfSuccessConcolic = 0;
+	public static int totalAmountOfTimeConcolic = 0;
+	public static void reset() {
+		numberOfUnchanged = 0;
+		numberOfTimeouts = 0;
+		numberOfMutations = 0;
+		numberOfConcolic = 0;
+		numberOfSuccessConcolic = 0;
+		totalAmountOfTimeConcolic = 0;
+	}
+
 	private static final long serialVersionUID = 7532366007973252782L;
 
 	private static final Logger logger = LoggerFactory.getLogger(TestChromosome.class);
@@ -286,6 +301,8 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	 */
 	@Override
 	public void mutate() {
+		numberOfMutations += 1;
+
 		boolean changed = false;
 		mutationHistory.clear();
 
@@ -465,12 +482,17 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		TestFactory testFactory = TestFactory.getInstance();
 
 		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION) {
+			numberOfConcolic += 1;
+			numberOfUnchanged += KexTestGenerator.INSTANCE.isCollected(this) ? 1 : 0;
+			long time = System.currentTimeMillis();
 			try {
 				changed = mutationConcolic();
 			} catch (Exception exc) {
 				logger.warn("Encountered exception when trying to use concolic mutation: {}", exc.getMessage());
 				logger.debug("Detailed exception trace: ", exc);
 			}
+			totalAmountOfTimeConcolic += System.currentTimeMillis() - time;
+			numberOfSuccessConcolic += changed ? 1 : 0;
 		}
 
 		if (!changed) {
@@ -564,6 +586,9 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 			this.setChanged(true);
 			this.lastExecutionResult = null;
 		} else {
+			if (stoppingCondition.invoke()) {
+				numberOfTimeouts += 1;
+			}
 			logger.debug("CONCOLIC: Did not create new test");
 		}
 
