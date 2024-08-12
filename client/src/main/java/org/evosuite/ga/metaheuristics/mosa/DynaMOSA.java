@@ -75,6 +75,7 @@ public class DynaMOSA extends AbstractMOSA {
 		statLogger.debug("Concolic mutation: Number of success concolic mutations: {}", TestChromosome.numberOfSuccessConcolic);
 		statLogger.debug("Concolic mutation: Number of timeout for concolic mutation: {}", TestChromosome.numberOfTimeouts);
 		statLogger.debug("Concolic mutation: Total time for concolic mutation: {}", TestChromosome.totalAmountOfTimeConcolic);
+		statLogger.debug("Concolic mutation: Number of irreversible for concolic mutation: {}", TestChromosome.numberOfIrreversibleConcolic);
 		long currentTime = System.currentTimeMillis();
 		KexTestGenerator.INSTANCE.collectTraces(
 				offspringPopulation,

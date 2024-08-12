@@ -53,6 +53,8 @@ object KexTestGenerator {
     const val KEX_GENERATION_TIMEOUT = 5000
     const val KEX_EXECUTION_TIMEOUT = 5000
 
+    fun isReversible() = clauseSelector.size() != 0
+
     fun isCollected(testChromosome: TestChromosome) = testChromosome.testCase.toCode() in cache
 
     fun collectTraces(testChromosomes: List<TestChromosome>, stoppingCondition: () -> Boolean) {
@@ -88,6 +90,9 @@ object KexTestGenerator {
     fun generateTest(chosenTest: TestChromosome, stoppingCondition: () -> Boolean): TestCase? = runBlocking {
         logger.info("Generating test with kex")
         var prevState = cache[chosenTest.testCase.toCode()]
+        if (chosenTest.testCase.toCode().count { a -> a == '\n' } >= 2 && chosenTest.testCase.toCode().count { a -> a == '\n' } <= 5) {
+            println(0)
+        }
         if (prevState == null) {
             collectTraces(listOf(chosenTest), stoppingCondition)
             prevState = cache[chosenTest.testCase.toCode()]!!
@@ -112,7 +117,8 @@ object KexTestGenerator {
             )
 
             val result = state.check(ctx) ?: continue
-            return@runBlocking generateTest(chosenTest.testCase.clone(), result)
+            val test = generateTest(chosenTest.testCase.clone(), result) ?: continue
+            return@runBlocking test
         }
         logger.info("Unsuccessful in the test generation")
         null

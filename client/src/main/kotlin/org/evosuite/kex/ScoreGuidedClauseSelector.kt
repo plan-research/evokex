@@ -6,6 +6,7 @@ import org.vorpal.research.kex.asm.analysis.concolic.bfs.BfsPathSelectorImpl
 import org.vorpal.research.kex.asm.analysis.concolic.coverage.InstructionGraph
 import org.vorpal.research.kex.trace.symbolic.Clause
 import org.vorpal.research.kex.trace.symbolic.PathClause
+import org.vorpal.research.kex.trace.symbolic.PathClauseType
 import org.vorpal.research.kfg.Package
 import org.vorpal.research.kfg.ir.Method
 import org.vorpal.research.kfg.ir.MethodDescriptor
@@ -26,16 +27,19 @@ class ScoreGuidedClauseSelector(
     private val candidates = mutableListOf<Pair<Int, Int>>()
     private val targetInstructions = targets.flatMapTo(mutableSetOf()) { it.body.flatten() }
     private val coveredInstructions = mutableSetOf<Instruction>()
+    private var index = 0
 
     override suspend fun isEmpty(): Boolean = coveredInstructions.containsAll(targetInstructions) ||
                                               candidates.isEmpty()
 
     override suspend fun hasNext(): Boolean = !isEmpty()
 
+    fun size() = candidates.size
+
     override suspend fun next(): Pair<MutableList<Clause>?, MutableList<PathClause>?> {
         if (isEmpty()) return null to null
-        val candidate = candidates.first()
-        candidates.remove(candidate)
+        val candidate = candidates[index]
+        index += 1
         return clauses.take(candidate.first + 1).toMutableList() to path.take(candidate.second + 1).toMutableList()
     }
 
@@ -81,7 +85,7 @@ class ScoreGuidedClauseSelector(
                 }
             } catch (_: Exception) {}
 
-            if (clause is PathClause) {
+            if (clause is PathClause && clause.type == PathClauseType.CONDITION_CHECK) {
                 stackTraces += currentStackTrace.toList()
                 assert(clause == path[pathIndex])
                 candidates.add(i to pathIndex)

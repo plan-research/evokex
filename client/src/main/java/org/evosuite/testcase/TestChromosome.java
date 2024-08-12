@@ -29,10 +29,6 @@ import org.evosuite.ga.localsearch.LocalSearchObjective;
 import org.evosuite.ga.operators.mutation.MutationHistory;
 import org.evosuite.kex.KexTestGenerator;
 import org.evosuite.runtime.util.AtMostOnceLogger;
-import org.evosuite.setup.TestCluster;
-import org.evosuite.symbolic.BranchCondition;
-import org.evosuite.symbolic.ConcolicExecution;
-import org.evosuite.symbolic.ConcolicMutation;
 import org.evosuite.testcase.execution.ExecutionResult;
 import org.evosuite.testcase.localsearch.TestCaseLocalSearch;
 import org.evosuite.testcase.statements.FunctionalMockStatement;
@@ -43,7 +39,6 @@ import org.evosuite.testsuite.AbstractTestSuiteChromosome;
 import org.evosuite.testsuite.TestSuiteChromosome;
 import org.evosuite.testsuite.TestSuiteFitnessFunction;
 import org.evosuite.utils.Randomness;
-import org.evosuite.utils.generic.GenericAccessibleObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,8 +51,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collector;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toCollection;
 
 /**
  * Chromosome representation of test cases
@@ -73,6 +66,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	public static int numberOfConcolic = 0;
 	public static int numberOfSuccessConcolic = 0;
 	public static int totalAmountOfTimeConcolic = 0;
+	public static int numberOfIrreversibleConcolic = 0;
 	public static void reset() {
 		numberOfUnchanged = 0;
 		numberOfTimeouts = 0;
@@ -80,6 +74,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		numberOfConcolic = 0;
 		numberOfSuccessConcolic = 0;
 		totalAmountOfTimeConcolic = 0;
+		numberOfIrreversibleConcolic = 0;
 	}
 
 	private static final long serialVersionUID = 7532366007973252782L;
@@ -493,6 +488,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 			}
 			totalAmountOfTimeConcolic += System.currentTimeMillis() - time;
 			numberOfSuccessConcolic += changed ? 1 : 0;
+			numberOfIrreversibleConcolic += KexTestGenerator.INSTANCE.isReversible() ? 1 : 0;
 		}
 
 		if (!changed) {
