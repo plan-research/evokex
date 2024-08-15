@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.evosuite.dse.VMError;
+import org.vorpal.research.kex.trace.symbolic.SymbolicTraceException;
 
 /**
  * <p>
@@ -54,6 +55,7 @@ import org.evosuite.dse.VMError;
 public class TestRunnable implements InterfaceTestRunnable {
 
 	private static final Logger logger = LoggerFactory.getLogger(TestRunnable.class);
+	private static final Logger statLogger = LoggerFactory.getLogger("StatLogger");
 
 	private static ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
 
@@ -197,7 +199,7 @@ public class TestRunnable implements InterfaceTestRunnable {
 			if(Properties.REPLACE_CALLS){
 				ShutdownHookHandler.getInstance().initHandler();
 			}
-			
+
 			executeStatements(result, out, num);
 		} catch (ThreadDeath e) {// can't stop these guys
 			logger.info("Found error in " + test.toCode(), e);
@@ -308,7 +310,11 @@ public class TestRunnable implements InterfaceTestRunnable {
 				/*
 				 * This is implemented in this way due to ExecutionResult.hasTimeout()
 				 */
-				if (exceptionThrown instanceof TestCaseExecutor.TimeoutExceeded) {
+				if (exceptionThrown instanceof TestCaseExecutor.TimeoutExceeded ||
+						(exceptionThrown instanceof SymbolicTraceException &&
+						 exceptionThrown.getCause() instanceof org.vorpal.research.kex.util.TimeoutException)) {
+					if (!(exceptionThrown instanceof TestCaseExecutor.TimeoutExceeded))
+						statLogger.debug("Kex timeout triggered");
 					logger.debug("Test timed out!");
 					exceptionsThrown.put(test.size(), exceptionThrown);
 					result.setThrownExceptions(exceptionsThrown);

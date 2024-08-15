@@ -45,6 +45,7 @@ import org.evosuite.testcase.TestCase;
 import org.evosuite.testcase.execution.reset.ClassReInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.vorpal.research.kex.trace.symbolic.SymbolicTraceBuilder;
 
 /**
  * <p>
@@ -398,6 +399,7 @@ public class TestCaseExecutor implements ThreadFactory {
 			}
 			logger.info("TimeoutException, need to stop runner", e1);
 			ExecutionTracer.setKillSwitch(true);
+			SymbolicTraceBuilder.setKillSwitch(true);
 			try {
 				handler.getLastTask().get(Properties.SHUTDOWN_TIMEOUT, TimeUnit.MILLISECONDS);
 			} catch (InterruptedException e2) {
@@ -419,6 +421,7 @@ public class TestCaseExecutor implements ThreadFactory {
 					// until we're outside the static constructor
 					LoopCounter.getInstance().setActive(false);
 					ExecutionTracer.setKillSwitch(false);
+					SymbolicTraceBuilder.setKillSwitch(false);
 					logger.info("Run still not finished, but awaiting for static initializer to finish.");
 
 					try {
@@ -430,6 +433,7 @@ public class TestCaseExecutor implements ThreadFactory {
 				}
 				LoopCounter.getInstance().setActive(loopCounter);
 				ExecutionTracer.setKillSwitch(true);
+				SymbolicTraceBuilder.setKillSwitch(true);
 
 				if (!callable.isRunFinished()) {
 					handler.getLastTask().cancel(true);
@@ -483,6 +487,7 @@ public class TestCaseExecutor implements ThreadFactory {
 			result.setTrace(ExecutionTracer.getExecutionTracer().getTrace());
 			ExecutionTracer.getExecutionTracer().clear();
 			ExecutionTracer.setKillSwitch(false);
+			SymbolicTraceBuilder.setKillSwitch(false);
 			ExecutionTracer.enable();
 			System.setOut(systemOut);
 			System.setErr(systemErr);
