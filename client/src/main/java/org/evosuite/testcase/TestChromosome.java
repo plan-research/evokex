@@ -61,20 +61,24 @@ import java.util.stream.Stream;
 public final class TestChromosome extends AbstractTestChromosome<TestChromosome>  {
 
 	public static int numberOfMutations = 0;
-	public static int numberOfUnchanged = 0;
+	public static int numberOfCollected = 0;
 	public static int numberOfTimeouts = 0;
 	public static int numberOfConcolic = 0;
 	public static int numberOfSuccessConcolic = 0;
 	public static int totalAmountOfTimeConcolic = 0;
 	public static int numberOfIrreversibleConcolic = 0;
+	public static int numberOfCovered = 0;
+	public static int numberOfMock = 0;
 	public static void reset() {
-		numberOfUnchanged = 0;
+		numberOfCovered = 0;
+		numberOfCollected = 0;
 		numberOfTimeouts = 0;
 		numberOfMutations = 0;
 		numberOfConcolic = 0;
 		numberOfSuccessConcolic = 0;
 		totalAmountOfTimeConcolic = 0;
 		numberOfIrreversibleConcolic = 0;
+		numberOfMock = 0;
 	}
 
 	private static final long serialVersionUID = 7532366007973252782L;
@@ -478,7 +482,8 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 
 		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION) {
 			numberOfConcolic += 1;
-			numberOfUnchanged += KexTestGenerator.INSTANCE.isCollected(this) ? 1 : 0;
+			numberOfMock += KexTestGenerator.INSTANCE.hasMock(getTestCase()) ? 1 : 0;
+			numberOfCollected += KexTestGenerator.INSTANCE.isCollected(this) ? 1 : 0;
 			long time = System.currentTimeMillis();
 			try {
 				changed = mutationConcolic();
@@ -574,6 +579,11 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 
 		TestCase newTest = KexTestGenerator.INSTANCE.generateTest(this, stoppingCondition);
 		if (newTest != null) {
+			if (newTest == this.test) {
+				logger.debug("CONCOLIC: Did not create new test because it was covered");
+				numberOfCovered += 1;
+				return false;
+			}
 			logger.debug("CONCOLIC: Created new test");
 			// logger.info(newTest.toCode());
 			// logger.info("Old test");

@@ -29,8 +29,10 @@ class ScoreGuidedClauseSelector(
     private val coveredInstructions = mutableSetOf<Instruction>()
     private var index = 0
 
-    override suspend fun isEmpty(): Boolean = coveredInstructions.containsAll(targetInstructions) ||
-                                              candidates.isEmpty()
+    fun allCovered() = coveredInstructions.containsAll(targetInstructions)
+
+    override suspend fun isEmpty(): Boolean = allCovered() ||
+                                              candidates.size == index
 
     override suspend fun hasNext(): Boolean = !isEmpty()
 
@@ -85,13 +87,16 @@ class ScoreGuidedClauseSelector(
                 }
             } catch (_: Exception) {}
 
-            if (clause is PathClause && clause.type == PathClauseType.CONDITION_CHECK) {
+            if (clause is PathClause) {
                 stackTraces += currentStackTrace.toList()
                 assert(clause == path[pathIndex])
-                candidates.add(i to pathIndex)
+                if (clause.type == PathClauseType.CONDITION_CHECK)
+                    candidates.add(i to pathIndex)
                 pathIndex++
             }
         }
+
+        index = 0
         assert(pathIndex == path.size)
 
         candidates.sortBy { (_, pathIndex) ->

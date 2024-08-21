@@ -302,6 +302,7 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
         when (statement) {
             is EnumPrimitiveStatement<*> ->  super.beforePrimitive(statement, scope) // TODO
             is EnvironmentDataStatement<*> -> super.beforePrimitive(statement, scope) // TODO("need more research here")
+            is NullStatement -> super.beforePrimitive(statement, scope)
             else -> {
                 val value = buildValue(statement.value, statement.returnClass)
                 modifyName(statement.returnValue.name, "primitive%" + value.name + "%" + statement.returnValue.name)

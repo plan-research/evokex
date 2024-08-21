@@ -7,10 +7,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.InternalSerializationApi
 import org.evosuite.Properties
+import org.evosuite.kex.observers.KexStatementObserver
 import org.evosuite.kex.observers.KexTestObserver
 import org.evosuite.testcase.DefaultTestCase
 import org.evosuite.testcase.TestCase
 import org.evosuite.testcase.TestChromosome
+import org.evosuite.testcase.statements.FunctionalMockStatement
 import org.evosuite.testcase.statements.PrimitiveStatement
 import org.evosuite.testcase.statements.StringPrimitiveStatement
 import org.evosuite.testcase.statements.numeric.*
@@ -25,6 +27,7 @@ import org.vorpal.research.kex.trace.symbolic.PersistentClauseList
 import org.vorpal.research.kex.trace.symbolic.PersistentPathCondition
 import org.vorpal.research.kex.trace.symbolic.PersistentSymbolicState
 import org.vorpal.research.kex.trace.symbolic.SymbolicState
+import org.vorpal.research.kex.trace.symbolic.protocol.SuccessResult
 import org.vorpal.research.kex.util.asmString
 import org.vorpal.research.kex.util.javaString
 import org.vorpal.research.kfg.Package
@@ -55,7 +58,18 @@ object KexTestGenerator {
 
     fun isReversible() = clauseSelector.size() != 0
 
+    fun isCovered() = clauseSelector.allCovered()
+
     fun isCollected(testChromosome: TestChromosome) = testChromosome.testCase.toCode() in cache
+
+    fun hasMock(testCase: TestCase): Boolean {
+        for (statement in testCase.toList()) {
+            if (statement is FunctionalMockStatement) {
+                return true
+            }
+        }
+        return false
+    }
 
     fun collectTraces(testChromosomes: List<TestChromosome>, stoppingCondition: () -> Boolean) {
         runBlocking {
@@ -63,6 +77,7 @@ object KexTestGenerator {
             for (test in testChromosomes) {
                 if (stoppingCondition()) break
                 if (test.testCase.toCode() in cache) continue
+                if (hasMock(test.testCase)) continue
 
                 try {
                     val observer = KexTestObserver(ctx)
@@ -90,18 +105,20 @@ object KexTestGenerator {
     fun generateTest(chosenTest: TestChromosome, stoppingCondition: () -> Boolean): TestCase? = runBlocking {
         logger.info("Generating test with kex")
         var prevState = cache[chosenTest.testCase.toCode()]
-        if (chosenTest.testCase.toCode().count { a -> a == '\n' } >= 2 && chosenTest.testCase.toCode().count { a -> a == '\n' } <= 5) {
-            println(0)
-        }
         if (prevState == null) {
             collectTraces(listOf(chosenTest), stoppingCondition)
-            prevState = cache[chosenTest.testCase.toCode()]!!
+            prevState = cache[chosenTest.testCase.toCode()] ?: return@runBlocking null
         }
         clauseSelector.setState(prevState.clauses.state, prevState.path.path)
+
+        if(!clauseSelector.hasNext()) {
+            return@runBlocking chosenTest.testCase
+        }
+
         while (clauseSelector.hasNext() && !stoppingCondition()) {
             val (clauseList, pathList) = clauseSelector.next()
             if (clauseList == null || pathList == null) {
-                continue
+                break
             }
 
             val reversed = clauseSelector.reverse(pathList.last()) ?: continue
