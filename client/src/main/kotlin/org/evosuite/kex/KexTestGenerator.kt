@@ -12,6 +12,7 @@ import org.evosuite.kex.observers.KexTestObserver
 import org.evosuite.testcase.DefaultTestCase
 import org.evosuite.testcase.TestCase
 import org.evosuite.testcase.TestChromosome
+import org.evosuite.testcase.statements.EnumPrimitiveStatement
 import org.evosuite.testcase.statements.FunctionalMockStatement
 import org.evosuite.testcase.statements.PrimitiveStatement
 import org.evosuite.testcase.statements.StringPrimitiveStatement
@@ -61,7 +62,8 @@ object KexTestGenerator {
     private fun isSupported(testCase: TestCase): Boolean {
         for (statement in testCase.toList()) {
             if (statement is FunctionalMockStatement ||
-                statement is EnvironmentDataStatement<*>) {
+                statement is EnvironmentDataStatement<*> ||
+                statement is EnumPrimitiveStatement<*>) {
                 return false
             }
         }
