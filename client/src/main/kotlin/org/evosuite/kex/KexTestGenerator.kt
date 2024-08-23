@@ -15,7 +15,9 @@ import org.evosuite.testcase.TestChromosome
 import org.evosuite.testcase.statements.FunctionalMockStatement
 import org.evosuite.testcase.statements.PrimitiveStatement
 import org.evosuite.testcase.statements.StringPrimitiveStatement
+import org.evosuite.testcase.statements.environment.EnvironmentDataStatement
 import org.evosuite.testcase.statements.numeric.*
+import org.junit.Test
 import org.slf4j.LoggerFactory
 import org.vorpal.research.kex.descriptor.*
 import org.vorpal.research.kex.ktype.KexChar
@@ -56,19 +58,14 @@ object KexTestGenerator {
     const val KEX_GENERATION_TIMEOUT = 5000
     const val KEX_EXECUTION_TIMEOUT = 5000
 
-    fun isReversible() = clauseSelector.size() != 0
-
-    fun isCovered() = clauseSelector.allCovered()
-
-    fun isCollected(testChromosome: TestChromosome) = testChromosome.testCase.toCode() in cache
-
-    fun hasMock(testCase: TestCase): Boolean {
+    private fun isSupported(testCase: TestCase): Boolean {
         for (statement in testCase.toList()) {
-            if (statement is FunctionalMockStatement) {
-                return true
+            if (statement is FunctionalMockStatement ||
+                statement is EnvironmentDataStatement<*>) {
+                return false
             }
         }
-        return false
+        return true
     }
 
     fun collectTraces(testChromosomes: List<TestChromosome>, stoppingCondition: () -> Boolean) {
@@ -77,7 +74,7 @@ object KexTestGenerator {
             for (test in testChromosomes) {
                 if (stoppingCondition()) break
                 if (test.testCase.toCode() in cache) continue
-                if (hasMock(test.testCase)) continue
+                if (!isSupported(test.testCase)) continue
 
                 try {
                     val observer = KexTestObserver(ctx)
@@ -104,15 +101,25 @@ object KexTestGenerator {
 
     fun generateTest(chosenTest: TestChromosome, stoppingCondition: () -> Boolean): TestCase? = runBlocking {
         logger.info("Generating test with kex")
+
+        if (!isSupported(chosenTest.testCase)) {
+            TestChromosome.numberOfUnsupported += 1
+            return@runBlocking null
+        }
+
         var prevState = cache[chosenTest.testCase.toCode()]
         if (prevState == null) {
             collectTraces(listOf(chosenTest), stoppingCondition)
             prevState = cache[chosenTest.testCase.toCode()] ?: return@runBlocking null
+        } else {
+            TestChromosome.numberOfCollected += 1
         }
         clauseSelector.setState(prevState.clauses.state, prevState.path.path)
 
-        if(!clauseSelector.hasNext()) {
-            return@runBlocking chosenTest.testCase
+        if (clauseSelector.size() == 0) {
+            TestChromosome.numberOfIrreversibleConcolic += 1
+        } else if (!clauseSelector.hasNext()){
+            TestChromosome.numberOfCovered += 1
         }
 
         while (clauseSelector.hasNext() && !stoppingCondition()) {
@@ -133,9 +140,16 @@ object KexTestGenerator {
                 prevState.termMap.toPersistentMap()
             )
 
-            val result = state.check(ctx) ?: continue
+            val result = state.check(ctx)
+            if (result == null) {
+                TestChromosome.numberOfUnsat += 1
+                continue
+            }
             val test = generateTest(chosenTest.testCase.clone(), result) ?: continue
             return@runBlocking test
+        }
+        if (stoppingCondition()) {
+            TestChromosome.numberOfTimeouts += 1
         }
         logger.info("Unsuccessful in the test generation")
         null

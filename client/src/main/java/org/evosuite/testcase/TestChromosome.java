@@ -68,7 +68,8 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	public static int totalAmountOfTimeConcolic = 0;
 	public static int numberOfIrreversibleConcolic = 0;
 	public static int numberOfCovered = 0;
-	public static int numberOfMock = 0;
+	public static int numberOfUnsupported = 0;
+	public static int numberOfUnsat = 0;
 	public static void reset() {
 		numberOfCovered = 0;
 		numberOfCollected = 0;
@@ -78,7 +79,8 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		numberOfSuccessConcolic = 0;
 		totalAmountOfTimeConcolic = 0;
 		numberOfIrreversibleConcolic = 0;
-		numberOfMock = 0;
+		numberOfUnsupported = 0;
+		numberOfUnsat = 0;
 	}
 
 	private static final long serialVersionUID = 7532366007973252782L;
@@ -482,8 +484,6 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 
 		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION) {
 			numberOfConcolic += 1;
-			numberOfMock += KexTestGenerator.INSTANCE.hasMock(getTestCase()) ? 1 : 0;
-			numberOfCollected += KexTestGenerator.INSTANCE.isCollected(this) ? 1 : 0;
 			long time = System.currentTimeMillis();
 			try {
 				changed = mutationConcolic();
@@ -493,7 +493,6 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 			}
 			totalAmountOfTimeConcolic += System.currentTimeMillis() - time;
 			numberOfSuccessConcolic += changed ? 1 : 0;
-			numberOfIrreversibleConcolic += KexTestGenerator.INSTANCE.isReversible() ? 1 : 0;
 		}
 
 		if (!changed) {
@@ -579,11 +578,6 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 
 		TestCase newTest = KexTestGenerator.INSTANCE.generateTest(this, stoppingCondition);
 		if (newTest != null) {
-			if (newTest == this.test) {
-				logger.debug("CONCOLIC: Did not create new test because it was covered");
-				numberOfCovered += 1;
-				return false;
-			}
 			logger.debug("CONCOLIC: Created new test");
 			// logger.info(newTest.toCode());
 			// logger.info("Old test");
@@ -592,9 +586,6 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 			this.setChanged(true);
 			this.lastExecutionResult = null;
 		} else {
-			if (stoppingCondition.invoke()) {
-				numberOfTimeouts += 1;
-			}
 			logger.debug("CONCOLIC: Did not create new test");
 		}
 
