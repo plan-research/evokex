@@ -62,8 +62,7 @@ object KexTestGenerator {
     private fun isSupported(testCase: TestCase): Boolean {
         for (statement in testCase.toList()) {
             if (statement is FunctionalMockStatement ||
-                statement is EnvironmentDataStatement<*> ||
-                statement is EnumPrimitiveStatement<*>) {
+                statement is EnvironmentDataStatement<*>) {
                 return false
             }
         }
@@ -231,6 +230,10 @@ object KexTestGenerator {
                         (newTest.getStatement(newTest.size() - 1) as BooleanPrimitiveStatement)
                             .value = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]]
                                 as ConstantDescriptor.Bool).value
+                    }
+
+                    is EnumPrimitiveStatement<*> -> {
+                        TODO()
                     }
 
                     else -> unreachable {}

@@ -6,11 +6,13 @@ import org.evosuite.testcase.statements.*
 import org.evosuite.testcase.statements.environment.EnvironmentDataStatement
 import org.evosuite.testcase.variable.*
 import org.vorpal.research.kex.ExecutionContext
+import org.vorpal.research.kex.ktype.KexNull
 import org.vorpal.research.kex.ktype.KexType
 import org.vorpal.research.kex.ktype.kexType
 import org.vorpal.research.kex.parameters.Parameters
 import org.vorpal.research.kex.state.predicate.Predicate
 import org.vorpal.research.kex.state.predicate.state
+import org.vorpal.research.kex.state.term.NullTerm
 import org.vorpal.research.kex.state.term.Term
 import org.vorpal.research.kex.state.term.TermBuilder.Terms.const
 import org.vorpal.research.kex.state.term.TermBuilder.Terms.field
@@ -31,10 +33,9 @@ import org.vorpal.research.kfg.ir.value.EmptyUsageContext
 import org.vorpal.research.kfg.ir.value.NameMapperContext
 import org.vorpal.research.kfg.ir.value.UsageContext
 import org.vorpal.research.kfg.ir.value.Value
-import org.vorpal.research.kfg.ir.value.instruction.BinaryOpcode
-import org.vorpal.research.kfg.ir.value.instruction.CmpOpcode
-import org.vorpal.research.kfg.ir.value.instruction.Instruction
-import org.vorpal.research.kfg.ir.value.instruction.InstructionBuilder
+import org.vorpal.research.kfg.ir.value.instruction.*
+import org.vorpal.research.kfg.type.NullType
+import org.vorpal.research.kfg.type.Reference
 import org.vorpal.research.kthelper.assert.unreachable
 import ru.spbstu.wheels.runIf
 import java.lang.reflect.Method
@@ -300,10 +301,20 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
 
     override fun beforePrimitive(statement: PrimitiveStatement<*>, scope: Scope) {
         when (statement) {
-            is EnumPrimitiveStatement<*> -> TODO()
+            is EnumPrimitiveStatement<*> -> {
+                val inst = instructions.getPhi(ctx, "name", types.get(statement.enumClass), emptyMap())
+                modifyName(statement.returnValue.name, "primitive%" + statement.value.name + "%" + statement.returnValue.name)
+                register(statement.returnValue, inst)
+            }
             is EnvironmentDataStatement<*> -> TODO("need more research here")
             is NullStatement -> {
-                register(statement.returnValue, values.nullConstant) // TODO: Discuss?
+                val name = collector.nameGenerator.nextName("$evoPrefix${getName(statement.returnValue.name)}")
+                val inst = instructions.getPhi(ctx, "$name = null", types.nullType, emptyMap())
+                val term = register(statement.returnValue, inst, name) // term { termFactory.getValue(KexNull(), name) }
+                val pred = state {
+                    term equality NullTerm()
+                }
+                postProcess(inst, pred)
             }
             else -> {
                 val value = buildValue(statement.value, statement.returnClass)
@@ -327,10 +338,10 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
 
     private fun getName(refName: String) = nameCache.getOrElse(refName) {refName}
 
-    private fun register(ref: VariableReference, value: Value): Term {
+    private fun register(ref: VariableReference, value: Value, name: String? = null): Term {
         val wrapped = ref.wrap(value)
         valueCache[getName(ref.name)] = wrapped
-        return mkNewTerm(wrapped, getName(ref.name))
+        return mkNewTerm(wrapped, name ?: getName(ref.name))
     }
 
     private fun mkValue(ref: VariableReference): WrappedValue =
