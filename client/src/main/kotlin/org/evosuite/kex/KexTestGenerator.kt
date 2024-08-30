@@ -1,5 +1,6 @@
 package org.evosuite.kex
 
+import com.jetbrains.rd.util.first
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -25,6 +26,8 @@ import org.vorpal.research.kex.ktype.KexChar
 import org.vorpal.research.kex.ktype.asArray
 import org.vorpal.research.kex.smt.InitialDescriptorReanimator
 import org.vorpal.research.kex.smt.SMTModel
+import org.vorpal.research.kex.state.term.StaticClassRefTerm
+import org.vorpal.research.kex.state.term.ValueTerm
 import org.vorpal.research.kex.state.transformer.DescriptorGenerator
 import org.vorpal.research.kex.trace.symbolic.PersistentClauseList
 import org.vorpal.research.kex.trace.symbolic.PersistentPathCondition
@@ -159,7 +162,7 @@ object KexTestGenerator {
     }
 
     private fun buildPrimitiveTermList(result: SMTModel) =
-        result.assignments.keys.filter { term -> term.name.contains("primitive") }
+        result.assignments.keys.filter { term -> term.name.contains("primitive") && term is ValueTerm }
 
     private fun generateTest(oldTest: TestCase, result: SMTModel): TestCase? {
         val primitiveTerms = buildPrimitiveTermList(result)
@@ -233,7 +236,17 @@ object KexTestGenerator {
                     }
 
                     is EnumPrimitiveStatement<*> -> {
-                        TODO()
+                        val descriptor = (descriptorGenerator.memory[primitiveTerms[indexOfCurrentPrimitiveTerm]] as ObjectDescriptor)
+                        val classTerm = descriptorGenerator.memory.filter {
+                            entry -> entry.key is StaticClassRefTerm && entry.key.type == descriptor.klass
+                        }
+                        assert(classTerm.size == 1)
+                        val value = (classTerm.first().value as ClassDescriptor).fields.filter {
+                            entry -> entry.value.term == descriptor.term
+                        }
+                        assert(value.size == 1)
+                        val enumValue = s.enumValues.find { v -> v.name == value.first().key.first }
+                        (newTest.getStatement(newTest.size() - 1) as EnumPrimitiveStatement<*>).value = enumValue
                     }
 
                     else -> unreachable {}
