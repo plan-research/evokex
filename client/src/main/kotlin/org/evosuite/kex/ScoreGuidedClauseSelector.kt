@@ -32,7 +32,7 @@ class ScoreGuidedClauseSelector(
     fun allCovered() = coveredInstructions.containsAll(targetInstructions)
 
     override suspend fun isEmpty(): Boolean = allCovered() ||
-                                              candidates.size == index
+            candidates.size == index
 
     override suspend fun hasNext(): Boolean = !isEmpty()
 
@@ -76,16 +76,17 @@ class ScoreGuidedClauseSelector(
                     }
 
                     is ReturnInst -> {
-                        currentStackTrace.removeLast()
+                        currentStackTrace.removeAt(currentStackTrace.size - 1)
                     }
 
                     is CatchInst -> {
                         while (stackTraces[stackTraces.size - 1].last().second != currentMethod) {
-                            currentStackTrace.removeLast()
+                            currentStackTrace.removeAt(currentStackTrace.size - 1)
                         }
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
 
             if (clause is PathClause) {
                 stackTraces += currentStackTrace.toList()
@@ -101,17 +102,19 @@ class ScoreGuidedClauseSelector(
 
         candidates.sortBy { (_, pathIndex) ->
 
-            val distance = instructionGraph.getVertex(path[pathIndex].instruction).
-                distanceToUncovered(targets, stackTraces[pathIndex].toPersistentList()).first
+            val distance = instructionGraph.getVertex(path[pathIndex].instruction)
+                .distanceToUncovered(targets, stackTraces[pathIndex].toPersistentList()).first
 
             distance
         }
     }
 
     // TODO: rewrite?
-    override fun reverse(pathClause: PathClause): PathClause? = BfsPathSelectorImpl(ctx, Method(
-        ctx.cm, OuterClass(ctx.cm, Package(""), "TestClass", Modifiers(0)),"name",
-        MethodDescriptor(emptyList(), ctx.cm.type.voidType)
-    )).reverse(pathClause)
+    override fun reverse(pathClause: PathClause): PathClause? = BfsPathSelectorImpl(
+        ctx, Method(
+            ctx.cm, OuterClass(ctx.cm, Package(""), "TestClass", Modifiers(0)), "name",
+            MethodDescriptor(emptyList(), ctx.cm.type.voidType)
+        )
+    ).reverse(pathClause)
 
 }

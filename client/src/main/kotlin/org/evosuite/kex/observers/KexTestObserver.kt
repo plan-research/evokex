@@ -302,20 +302,28 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
     override fun beforePrimitive(statement: PrimitiveStatement<*>, scope: Scope) {
         when (statement) {
             is EnumPrimitiveStatement<*> -> {
-                val inst = instructions.getPhi(ctx, "name", types.get(statement.enumClass), emptyMap())
-                modifyName(statement.returnValue.name, "primitive%" + statement.value.name + "%" + statement.returnValue.name)
+                val name = "primitive%" + statement.value.name + "%" + statement.returnValue.name
+                val inst = instructions.getPhi(ctx, name, types.get(statement.enumClass), emptyMap())
+                modifyName(statement.returnValue.name, name)
                 register(statement.returnValue, inst)
             }
+
             is EnvironmentDataStatement<*> -> TODO("need more research here")
             is NullStatement -> {
                 val name = collector.nameGenerator.nextName("$evoPrefix${getName(statement.returnValue.name)}")
-                val inst = instructions.getPhi(ctx, "$name = null", types.nullType, emptyMap())
-                val term = register(statement.returnValue, inst, name) // term { termFactory.getValue(KexNull(), name) }
+                val inst = instructions.getPhi(
+                    ctx,
+                    "$name%EqNull",
+                    types.get(statement.returnValue.type as Class<*>),
+                    emptyMap()
+                )
+                val term = register(statement.returnValue, inst, name)
                 val pred = state {
-                    term equality NullTerm()
+                    term equality null
                 }
                 postProcess(inst, pred)
             }
+
             else -> {
                 val value = buildValue(statement.value, statement.returnClass)
                 modifyName(statement.returnValue.name, "primitive%" + value.name + "%" + statement.returnValue.name)
@@ -336,7 +344,7 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
         nameCache[old] = new
     }
 
-    private fun getName(refName: String) = nameCache.getOrElse(refName) {refName}
+    private fun getName(refName: String) = nameCache.getOrElse(refName) { refName }
 
     private fun register(ref: VariableReference, value: Value, name: String? = null): Term {
         val wrapped = ref.wrap(value)
@@ -397,36 +405,47 @@ class KexTestObserver(executionContext: ExecutionContext, private val id: Int = 
         Boolean::class.java -> {
             values.getBool(value as Boolean)
         }
+
         Byte::class.java -> {
             values.getByte(value as Byte)
         }
+
         Char::class.java -> {
             values.getChar(value as Char)
         }
+
         Short::class.java -> {
             values.getShort(value as Short)
         }
+
         Int::class.java -> {
             values.getInt(value as Int)
         }
+
         Long::class.java -> {
             values.getLong(value as Long)
         }
+
         Float::class.java -> {
             values.getFloat(value as Float)
         }
+
         Double::class.java -> {
             values.getDouble(value as Double)
         }
+
         String::class.java -> {
             values.getString(value as String)
         }
+
         Class::class.java -> {
             values.getClass(types.get(value as Class<*>))
         }
+
         Method::class.java -> {
             values.getMethod((value as Method).kfgMethod)
         }
+
         else -> unreachable { }
     }
 
