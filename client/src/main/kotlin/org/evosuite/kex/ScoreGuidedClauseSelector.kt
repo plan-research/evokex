@@ -4,18 +4,20 @@ import kotlinx.collections.immutable.toPersistentList
 import org.vorpal.research.kex.ExecutionContext
 import org.vorpal.research.kex.asm.analysis.concolic.bfs.BfsPathSelectorImpl
 import org.vorpal.research.kex.asm.analysis.concolic.coverage.InstructionGraph
+import org.vorpal.research.kex.state.predicate.EqualityPredicate
+import org.vorpal.research.kex.state.term.*
 import org.vorpal.research.kex.trace.symbolic.Clause
 import org.vorpal.research.kex.trace.symbolic.PathClause
 import org.vorpal.research.kex.trace.symbolic.PathClauseType
+import org.vorpal.research.kex.trace.symbolic.SymbolicState
 import org.vorpal.research.kfg.Package
 import org.vorpal.research.kfg.ir.Method
 import org.vorpal.research.kfg.ir.MethodDescriptor
 import org.vorpal.research.kfg.ir.Modifiers
 import org.vorpal.research.kfg.ir.OuterClass
-import org.vorpal.research.kfg.ir.value.instruction.CallInst
-import org.vorpal.research.kfg.ir.value.instruction.CatchInst
-import org.vorpal.research.kfg.ir.value.instruction.Instruction
-import org.vorpal.research.kfg.ir.value.instruction.ReturnInst
+import org.vorpal.research.kfg.ir.value.NullConstant
+import org.vorpal.research.kfg.ir.value.instruction.*
+import java.util.*
 
 class ScoreGuidedClauseSelector(
     override val targets: Set<Method>,
@@ -56,6 +58,8 @@ class ScoreGuidedClauseSelector(
         clauses.addAll(newClauses)
         path.addAll(newPath)
 
+        val isPrimitiveDependent = WeakHashMap<Term, Boolean>()
+
         candidates.clear()
         var pathIndex = 0
         val stackTraces = mutableListOf<List<Pair<Instruction?, Method>>>()
@@ -91,9 +95,30 @@ class ScoreGuidedClauseSelector(
             if (clause is PathClause) {
                 stackTraces += currentStackTrace.toList()
                 assert(clause == path[pathIndex])
-                if (clause.type == PathClauseType.CONDITION_CHECK)
+                if (isPathClauseReversible(clause, isPrimitiveDependent)) {
                     candidates.add(i to pathIndex)
+                }
                 pathIndex++
+            } else {
+                if (clause.predicate is EqualityPredicate && (clause.predicate as EqualityPredicate).lhv !is ConstBoolTerm) {
+                    when ((clause.predicate as EqualityPredicate).rhv) {
+                        is CmpTerm -> {
+                            if (((clause.predicate as EqualityPredicate).rhv as CmpTerm).rhv !is NullTerm) {
+                                isPrimitiveDependent[(clause.predicate as EqualityPredicate).lhv] =
+                                    isPrimitiveDependent[((clause.predicate as EqualityPredicate).rhv as CmpTerm).lhv] ?: ((clause.predicate as EqualityPredicate).rhv as CmpTerm).lhv.check
+                                            || isPrimitiveDependent[((clause.predicate as EqualityPredicate).rhv as CmpTerm).rhv] ?: ((clause.predicate as EqualityPredicate).rhv as CmpTerm).rhv.check
+
+                            }
+                        }
+
+                        is InstanceOfTerm -> isPrimitiveDependent[(clause.predicate as EqualityPredicate).lhv] = false
+
+                        else -> isPrimitiveDependent[(clause.predicate as EqualityPredicate).lhv] =
+                            isPrimitiveDependent[(clause.predicate as EqualityPredicate).rhv]
+                                ?: (clause.predicate as EqualityPredicate).rhv.check
+
+                    }
+                }
             }
         }
 
@@ -109,6 +134,12 @@ class ScoreGuidedClauseSelector(
         }
     }
 
+    private fun isPathClauseReversible(clause: PathClause, isPrimitiveDependent: WeakHashMap<Term, Boolean>): Boolean {
+        return clause.type == PathClauseType.CONDITION_CHECK && clause.predicate.operands.map { op ->
+            isPrimitiveDependent[op] ?: op.check
+        }.fold(false) { acc, cur -> acc || cur }
+    }
+
     // TODO: rewrite?
     override fun reverse(pathClause: PathClause): PathClause? = BfsPathSelectorImpl(
         ctx, Method(
@@ -116,5 +147,7 @@ class ScoreGuidedClauseSelector(
             MethodDescriptor(emptyList(), ctx.cm.type.voidType)
         )
     ).reverse(pathClause)
+
+    private val Term.check: Boolean get() = this.name.contains("%primitive%") && this is ValueTerm
 
 }

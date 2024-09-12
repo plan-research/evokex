@@ -8,7 +8,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.InternalSerializationApi
 import org.evosuite.Properties
-import org.evosuite.kex.observers.KexStatementObserver
 import org.evosuite.kex.observers.KexTestObserver
 import org.evosuite.testcase.DefaultTestCase
 import org.evosuite.testcase.TestCase
@@ -19,7 +18,7 @@ import org.evosuite.testcase.statements.PrimitiveStatement
 import org.evosuite.testcase.statements.StringPrimitiveStatement
 import org.evosuite.testcase.statements.environment.EnvironmentDataStatement
 import org.evosuite.testcase.statements.numeric.*
-import org.junit.Test
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.vorpal.research.kex.descriptor.*
 import org.vorpal.research.kex.ktype.KexChar
@@ -33,7 +32,6 @@ import org.vorpal.research.kex.trace.symbolic.PersistentClauseList
 import org.vorpal.research.kex.trace.symbolic.PersistentPathCondition
 import org.vorpal.research.kex.trace.symbolic.PersistentSymbolicState
 import org.vorpal.research.kex.trace.symbolic.SymbolicState
-import org.vorpal.research.kex.trace.symbolic.protocol.SuccessResult
 import org.vorpal.research.kex.util.asmString
 import org.vorpal.research.kex.util.javaString
 import org.vorpal.research.kfg.Package
@@ -50,9 +48,10 @@ import kotlin.time.ExperimentalTime
 @DelicateCoroutinesApi
 object KexTestGenerator {
     private val logger = LoggerFactory.getLogger(KexTestGenerator::class.java)
+    private val statLogger = LoggerFactory.getLogger("StatLogger")
 
     private val ctx get() = KexService.ctx
-    private val cache = WeakHashMap<String, SymbolicState>()
+    private val cache = HashMap<String, SymbolicState>()
     private val clauseSelector =
         ScoreGuidedClauseSelector(ctx.cm[Properties.TARGET_CLASS.asmString].allMethods, ctx)
 
@@ -62,14 +61,16 @@ object KexTestGenerator {
     const val KEX_GENERATION_TIMEOUT = 5000
     const val KEX_EXECUTION_TIMEOUT = 5000
 
-    private fun isSupported(testCase: TestCase): Boolean {
+    private fun isSupported(testCase: TestCase): Int {
         for (statement in testCase.toList()) {
-            if (statement is FunctionalMockStatement ||
-                statement is EnvironmentDataStatement<*>) {
-                return false
+            if (statement is FunctionalMockStatement) {
+                return 0
+            }
+            if (statement is EnvironmentDataStatement<*>) {
+                return 1
             }
         }
-        return true
+        return 2
     }
 
     fun collectTraces(testChromosomes: List<TestChromosome>, stoppingCondition: () -> Boolean) {
@@ -78,7 +79,7 @@ object KexTestGenerator {
             for (test in testChromosomes) {
                 if (stoppingCondition()) break
                 if (test.testCase.toCode() in cache) continue
-                if (!isSupported(test.testCase)) continue
+                if (isSupported(test.testCase) != 2) continue
 
                 try {
                     val observer = KexTestObserver(ctx)
@@ -106,8 +107,9 @@ object KexTestGenerator {
     fun generateTest(chosenTest: TestChromosome, stoppingCondition: () -> Boolean): TestCase? = runBlocking {
         logger.info("Generating test with kex")
 
-        if (!isSupported(chosenTest.testCase)) {
-            TestChromosome.numberOfUnsupported += 1
+        val supported = isSupported(chosenTest.testCase)
+        if (supported != 2) {
+            TestChromosome.numberOfUnsupported[supported] += 1
             return@runBlocking null
         }
 
@@ -144,10 +146,16 @@ object KexTestGenerator {
                 prevState.termMap.toPersistentMap()
             )
 
+            val t = System.currentTimeMillis()
             val result = state.check(ctx)
+            val duration = (System.currentTimeMillis() - t).toInt()
             if (result == null) {
+                TestChromosome.timeOfUnsat += duration
                 TestChromosome.numberOfUnsat += 1
-                continue
+                break
+            } else {
+                TestChromosome.timeOfSat += duration
+                TestChromosome.numberOfSat += 1
             }
             val test = generateTest(chosenTest.testCase.clone(), result) ?: continue
             return@runBlocking test

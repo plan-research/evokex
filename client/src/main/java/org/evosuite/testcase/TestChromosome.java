@@ -68,8 +68,11 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	public static int totalAmountOfTimeConcolic = 0;
 	public static int numberOfIrreversibleConcolic = 0;
 	public static int numberOfCovered = 0;
-	public static int numberOfUnsupported = 0;
+	public static int[] numberOfUnsupported = {0, 0};
 	public static int numberOfUnsat = 0;
+	public static int numberOfSat = 0;
+	public static int timeOfUnsat = 0;
+	public static int timeOfSat = 0;
 	public static void reset() {
 		numberOfCovered = 0;
 		numberOfCollected = 0;
@@ -79,8 +82,11 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		numberOfSuccessConcolic = 0;
 		totalAmountOfTimeConcolic = 0;
 		numberOfIrreversibleConcolic = 0;
-		numberOfUnsupported = 0;
+		numberOfUnsupported = new int[]{0, 0};
 		numberOfUnsat = 0;
+		numberOfSat = 0;
+		timeOfUnsat = 0;
+		timeOfSat = 0;
 	}
 
 	private static final long serialVersionUID = 7532366007973252782L;
