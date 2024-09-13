@@ -83,6 +83,7 @@ public class DynaMOSA extends AbstractMOSA {
 		statLogger.debug("Concolic mutation: Number of sats concolic mutation: {}", TestChromosome.numberOfSat);
 		statLogger.debug("Concolic mutation: Total time for of unsats concolic mutation: {}", TestChromosome.timeOfUnsat);
 		statLogger.debug("Concolic mutation: Total time for of sats concolic mutation: {}", TestChromosome.timeOfSat);
+		statLogger.debug("Concolic mutation: Number of Kex calls: {}", TestChromosome.numberOfKexCalls);
 
 		long currentTime = System.currentTimeMillis();
 		KexTestGenerator.INSTANCE.collectTraces(

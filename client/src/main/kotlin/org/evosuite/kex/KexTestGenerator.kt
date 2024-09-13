@@ -128,7 +128,9 @@ object KexTestGenerator {
             TestChromosome.numberOfCovered += 1
         }
 
+        var i = 0
         while (clauseSelector.hasNext() && !stoppingCondition()) {
+            i += 1
             val (clauseList, pathList) = clauseSelector.next()
             if (clauseList == null || pathList == null) {
                 break
@@ -145,6 +147,9 @@ object KexTestGenerator {
                 prevState.concreteValues.toPersistentMap(),
                 prevState.termMap.toPersistentMap()
             )
+
+            if (i == 1)
+                TestChromosome.numberOfKexCalls += 1;
 
             val t = System.currentTimeMillis()
             val result = state.check(ctx)

@@ -73,6 +73,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	public static int numberOfSat = 0;
 	public static int timeOfUnsat = 0;
 	public static int timeOfSat = 0;
+	public static int numberOfKexCalls = 0;
 	public static void reset() {
 		numberOfCovered = 0;
 		numberOfCollected = 0;
@@ -82,6 +83,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		numberOfSuccessConcolic = 0;
 		totalAmountOfTimeConcolic = 0;
 		numberOfIrreversibleConcolic = 0;
+		numberOfKexCalls = 0;
 		numberOfUnsupported = new int[]{0, 0};
 		numberOfUnsat = 0;
 		numberOfSat = 0;
