@@ -4,18 +4,13 @@ import kotlinx.collections.immutable.toPersistentList
 import org.vorpal.research.kex.ExecutionContext
 import org.vorpal.research.kex.asm.analysis.concolic.bfs.BfsPathSelectorImpl
 import org.vorpal.research.kex.asm.analysis.concolic.coverage.InstructionGraph
-import org.vorpal.research.kex.state.predicate.*
-import org.vorpal.research.kex.state.term.*
-import org.vorpal.research.kex.trace.symbolic.Clause
-import org.vorpal.research.kex.trace.symbolic.PathClause
-import org.vorpal.research.kex.trace.symbolic.PathClauseType
+import org.vorpal.research.kex.trace.symbolic.*
 import org.vorpal.research.kfg.Package
 import org.vorpal.research.kfg.ir.Method
 import org.vorpal.research.kfg.ir.MethodDescriptor
 import org.vorpal.research.kfg.ir.Modifiers
 import org.vorpal.research.kfg.ir.OuterClass
 import org.vorpal.research.kfg.ir.value.instruction.*
-import java.util.*
 
 class ScoreGuidedClauseSelector(
     override val targets: Set<Method>,
@@ -25,8 +20,6 @@ class ScoreGuidedClauseSelector(
     private val clauses = mutableListOf<Clause>()
     private val path = mutableListOf<PathClause>()
     private val candidates = mutableListOf<Pair<Int, Int>>()
-    private val isPrimitiveDependent = WeakHashMap<Term, Boolean>()
-    private val isCallPrimitiveDependent = mutableListOf(false)
     private val targetInstructions = targets.flatMapTo(mutableSetOf()) { it.body.flatten() }
     private val coveredInstructions = mutableSetOf<Instruction>()
     private var index = 0
@@ -52,7 +45,15 @@ class ScoreGuidedClauseSelector(
         coveredInstructions += trace
     }
 
-    fun setState(newClauses: List<Clause>, newPath: List<PathClause>) {
+    fun setState(state: SymbolicState) {
+        val newClauses = state.clauses.state
+        val newPath = state.path.path
+
+        val analysis = PrimitiveDependencyAnalysis()
+        val clausesWithoutPath = newClauses.filterNot { it is PathClause }
+
+        analysis.apply(clausesWithoutPath.toClauseState().asState())
+
         clauses.clear()
         path.clear()
         clauses.addAll(newClauses)
@@ -71,7 +72,6 @@ class ScoreGuidedClauseSelector(
                 when (currentInstruction) {
                     currentMethod.body.entry.first() -> {
                         currentStackTrace += previousInstruction to currentMethod
-                        isCallPrimitiveDependent += false
                     }
 
                     is CallInst -> {
@@ -80,13 +80,11 @@ class ScoreGuidedClauseSelector(
 
                     is ReturnInst -> {
                         currentStackTrace.removeAt(currentStackTrace.size - 1)
-                        isCallPrimitiveDependent.removeAt(isCallPrimitiveDependent.size - 1)
                     }
 
                     is CatchInst -> {
                         while (stackTraces[stackTraces.size - 1].last().second != currentMethod) {
                             currentStackTrace.removeAt(currentStackTrace.size - 1)
-                            isCallPrimitiveDependent.removeAt(isCallPrimitiveDependent.size - 1)
                         }
                     }
                 }
@@ -96,78 +94,10 @@ class ScoreGuidedClauseSelector(
             if (clause is PathClause) {
                 stackTraces += currentStackTrace.toList()
                 assert(clause == path[pathIndex])
-                if (isPathClauseReversible(clause)) {
+                if (isPathClauseReversible(clause, analysis)) {
                     candidates.add(i to pathIndex)
                 }
                 pathIndex++
-            } else {
-                when (val predicate = clause.predicate) {
-                    is FieldStorePredicate -> {
-                        isPrimitiveDependent[predicate.field] = isPrimitive(predicate.value)
-                        isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.field]!!
-                    }
-
-                    is EqualityPredicate -> {
-                        if (predicate.lhv !is ConstBoolTerm) {
-                            isPrimitiveDependent[predicate.lhv] = isPrimitive(predicate.rhv)
-                            if (predicate.lhv.isReturnValue) {
-                                isPrimitiveDependent[predicate.lhv] =
-                                    isPrimitiveDependent[predicate.lhv]!! || isCallPrimitiveDependent.last()
-                            }
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                                isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.lhv]!!
-                        }
-                    }
-
-
-                    is InequalityPredicate -> {
-                        isPrimitiveDependent[predicate.lhv] = isPrimitive(predicate.rhv)
-                        isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.lhv]!!
-                    }
-
-                    is GenerateArrayPredicate -> {
-                        isPrimitiveDependent[predicate.lhv] =
-                            isPrimitive(predicate.length) || isPrimitive(predicate.generator)
-                        isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.lhv]!!
-                    }
-
-                    is FieldInitializerPredicate -> {
-                        isPrimitiveDependent[predicate.field] = isPrimitive(predicate.value)
-                        isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.field]!!
-                    }
-
-                    is NewPredicate -> {
-                        isPrimitiveDependent[predicate.lhv] = false
-                    }
-
-                    is NewInitializerPredicate -> {
-                        isPrimitiveDependent[predicate.lhv] = false
-                    }
-
-                    is NewArrayPredicate -> {
-                        isPrimitiveDependent[predicate.lhv] = false
-                    }
-
-                    is NewArrayInitializerPredicate -> {
-                        isPrimitiveDependent[predicate.lhv] = false
-                    }
-
-                    is ArrayStorePredicate -> {
-                        isPrimitiveDependent[predicate.arrayRef] = isPrimitive(predicate.value)
-                        isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.arrayRef]!!
-                    }
-
-                    is ArrayInitializerPredicate -> {
-                        isPrimitiveDependent[predicate.arrayRef] = isPrimitive(predicate.value)
-                        isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] =
-                            isCallPrimitiveDependent[isCallPrimitiveDependent.size - 1] || isPrimitiveDependent[predicate.arrayRef]!!
-                    }
-                }
             }
         }
 
@@ -181,9 +111,9 @@ class ScoreGuidedClauseSelector(
         }
     }
 
-    private fun isPathClauseReversible(clause: PathClause): Boolean {
+    private fun isPathClauseReversible(clause: PathClause, analysis: PrimitiveDependencyAnalysis): Boolean {
         return clause.type == PathClauseType.CONDITION_CHECK && clause.predicate.operands.fold(false) { acc, cur ->
-            acc || getOrUpdate(cur)
+            acc || analysis.isPrimitiveDependent(cur)
         }
     }
 
@@ -194,41 +124,4 @@ class ScoreGuidedClauseSelector(
             MethodDescriptor(emptyList(), ctx.cm.type.voidType)
         )
     ).reverse(pathClause)
-
-    private val Term.isPrimitiveValue: Boolean get() = this.name.contains("%primitive%")
-    private val Term.isReturnValue: Boolean get() = this.name.contains("retval")
-
-    private fun isPrimitive(term: Term): Boolean {
-        when (term) {
-            is CmpTerm -> {
-                if (term.rhv !is NullTerm) {
-                    return getOrUpdate(term.lhv) || getOrUpdate(term.rhv)
-                }
-                return false
-            }
-
-            is InstanceOfTerm -> return false
-
-            is ValueTerm -> {
-                if (term.isPrimitiveValue)
-                    return true
-                if (term.isReturnValue) {
-                    if (isCallPrimitiveDependent.isEmpty()) return getOrUpdate(term, false)
-                    return getOrUpdate(term, isCallPrimitiveDependent.last())
-                }
-                return isPrimitiveDependent[term] ?: false
-            }
-
-            else -> return term.subTerms.fold(false) { acc, cur -> acc || getOrUpdate(cur) }
-
-        }
-    }
-
-    private fun getOrUpdate(term: Term, value: Boolean? = null): Boolean {
-        if (isPrimitiveDependent[term] == null) {
-            isPrimitiveDependent[term] = value ?: isPrimitive(term)
-        }
-        return isPrimitiveDependent[term]!!
-    }
-
 }

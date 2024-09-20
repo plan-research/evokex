@@ -14,11 +14,11 @@ import org.evosuite.testcase.TestCase
 import org.evosuite.testcase.TestChromosome
 import org.evosuite.testcase.statements.EnumPrimitiveStatement
 import org.evosuite.testcase.statements.FunctionalMockStatement
+import org.evosuite.testcase.statements.NullStatement
 import org.evosuite.testcase.statements.PrimitiveStatement
 import org.evosuite.testcase.statements.StringPrimitiveStatement
 import org.evosuite.testcase.statements.environment.EnvironmentDataStatement
 import org.evosuite.testcase.statements.numeric.*
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.vorpal.research.kex.descriptor.*
 import org.vorpal.research.kex.ktype.KexChar
@@ -48,7 +48,6 @@ import kotlin.time.ExperimentalTime
 @DelicateCoroutinesApi
 object KexTestGenerator {
     private val logger = LoggerFactory.getLogger(KexTestGenerator::class.java)
-    private val statLogger = LoggerFactory.getLogger("StatLogger")
 
     private val ctx get() = KexService.ctx
     private val cache = HashMap<String, SymbolicState>()
@@ -120,7 +119,7 @@ object KexTestGenerator {
         } else {
             TestChromosome.numberOfCollected += 1
         }
-        clauseSelector.setState(prevState.clauses.state, prevState.path.path)
+        clauseSelector.setState(prevState)
 
         if (clauseSelector.size() == 0) {
             TestChromosome.numberOfIrreversibleConcolic += 1
@@ -149,7 +148,7 @@ object KexTestGenerator {
             )
 
             if (i == 1)
-                TestChromosome.numberOfKexCalls += 1;
+                TestChromosome.numberOfKexCalls += 1
 
             val t = System.currentTimeMillis()
             val result = state.check(ctx)
@@ -191,7 +190,7 @@ object KexTestGenerator {
 
         for (s in oldTest) {
             newTest.addStatement(s.clone(newTest))
-            if (s is PrimitiveStatement<*> && primitivesLeft) {
+            if (s is PrimitiveStatement<*> && s !is NullStatement && primitivesLeft) {
                 isTestChanged = true
                 when (s) {
                     is IntPrimitiveStatement -> {
