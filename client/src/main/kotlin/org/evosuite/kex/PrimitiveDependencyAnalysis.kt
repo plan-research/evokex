@@ -46,7 +46,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformArrayLengthTerm(term: ArrayLengthTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.arrayRef]
+        isPrimitiveDependent[term] = false
         return term
     }
 
