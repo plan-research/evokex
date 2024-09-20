@@ -3,19 +3,20 @@ package org.evosuite.kex
 import org.vorpal.research.kex.state.predicate.*
 import org.vorpal.research.kex.state.term.*
 import org.vorpal.research.kex.state.transformer.Transformer
-import org.vorpal.research.kthelper.assert.unreachable
 import java.util.*
 
 class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
-    private val isPrimitiveDependent = WeakHashMap<Term, Boolean>()
+    private val isPrimitiveDependentTerm = WeakHashMap<Term, Boolean>()
+    private val isPrimitiveDependentPathPredicate = mutableListOf<Boolean>()
 
     init {
-        isPrimitiveDependent[ConstBoolTerm(true)] = false
-        isPrimitiveDependent[ConstBoolTerm(false)] = false
+        isPrimitiveDependentTerm[ConstBoolTerm(true)] = false
+        isPrimitiveDependentTerm[ConstBoolTerm(false)] = false
     }
 
-    fun isPrimitiveDependent(term: Term): Boolean {
-        return isPrimitiveDependent[term] ?: unreachable { }
+    fun isPrimitiveDependentPathPredicate(index: Int): Boolean {
+        assert(isPrimitiveDependentPathPredicate.size >= index)
+        return isPrimitiveDependentPathPredicate[index]
     }
 
     private val Term.isPrimitiveValue: Boolean get() = this.name.contains("%primitive%")
@@ -26,18 +27,20 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
 
     override fun transformArrayLoadTerm(term: ArrayLoadTerm): Term {
         assert(term.arrayRef is ArrayIndexTerm)
-        isPrimitiveDependent[term] =
-            isPrimitiveDependent[term.arrayRef]!! || isPrimitiveDependent[(term.arrayRef as ArrayIndexTerm).arrayRef]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.arrayRef]!! || isPrimitiveDependentTerm[(term.arrayRef as ArrayIndexTerm).arrayRef]!!
         return term
     }
 
     override fun transformArrayContainsTerm(term: ArrayContainsTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.value]!! || isPrimitiveDependent[term.array]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.value]!! || isPrimitiveDependentTerm[term.array]!!
         return term
     }
 
     override fun transformArrayIndexTerm(term: ArrayIndexTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.index]!! || isPrimitiveDependent[term.arrayRef]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.index]!! || isPrimitiveDependentTerm[term.arrayRef]!!
         return term
     }
 
@@ -46,124 +49,127 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformArrayLengthTerm(term: ArrayLengthTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformCharAtTerm(term: CharAtTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.index]!! || isPrimitiveDependent[term.string]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.index]!! || isPrimitiveDependentTerm[term.string]!!
         return term
     }
 
     override fun transformBinaryTerm(term: BinaryTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.lhv]!! || isPrimitiveDependent[term.rhv]!!
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.lhv]!! || isPrimitiveDependentTerm[term.rhv]!!
         return term
     }
 
     override fun transformBoundTerm(term: BoundTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformCallTerm(term: CallTerm): Term {
-        isPrimitiveDependent[term] = term.arguments.fold(false) { acc, cur ->
-            isPrimitiveDependent[cur]!! || acc
-        } || isPrimitiveDependent[term.owner]!!
+        isPrimitiveDependentTerm[term] = term.arguments.fold(false) { acc, cur ->
+            isPrimitiveDependentTerm[cur]!! || acc
+        } || isPrimitiveDependentTerm[term.owner]!!
         return term
     }
 
     override fun transformCastTerm(term: CastTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.operand]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.operand]
         return term
     }
 
     override fun transformClassAccessTerm(term: ClassAccessTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.operand]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.operand]
         return term
     }
 
     override fun transformCmpTerm(term: CmpTerm): Term {
         if (term.rhv !is NullTerm) {
-            isPrimitiveDependent[term] = isPrimitiveDependent[term.lhv]!! || isPrimitiveDependent[term.rhv]!!
+            isPrimitiveDependentTerm[term] =
+                isPrimitiveDependentTerm[term.lhv]!! || isPrimitiveDependentTerm[term.rhv]!!
         } else {
-            isPrimitiveDependent[term] = false
+            isPrimitiveDependentTerm[term] = false
         }
         return term
     }
 
     override fun transformConcatTerm(term: ConcatTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.lhv]!! || isPrimitiveDependent[term.rhv]!!
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.lhv]!! || isPrimitiveDependentTerm[term.rhv]!!
         return term
     }
 
     override fun transformConstBoolTerm(term: ConstBoolTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstByteTerm(term: ConstByteTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstCharTerm(term: ConstCharTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstDoubleTerm(term: ConstDoubleTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstIntTerm(term: ConstIntTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstLongTerm(term: ConstLongTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstFloatTerm(term: ConstFloatTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstClassTerm(term: ConstClassTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstStringTerm(term: ConstStringTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformConstShortTerm(term: ConstShortTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformEndsWithTerm(term: EndsWithTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.string]!! || isPrimitiveDependent[term.suffix]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.string]!! || isPrimitiveDependentTerm[term.suffix]!!
         return term
     }
 
     override fun transformEqualsTerm(term: EqualsTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.lhv]!! || isPrimitiveDependent[term.rhv]!!
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.lhv]!! || isPrimitiveDependentTerm[term.rhv]!!
         return term
     }
 
     override fun transformExistsTerm(term: ExistsTerm): Term {
-        isPrimitiveDependent[term] =
-            isPrimitiveDependent[term.start]!! || isPrimitiveDependent[term.end]!! || isPrimitiveDependent[term.body]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.start]!! || isPrimitiveDependentTerm[term.end]!! || isPrimitiveDependentTerm[term.body]!!
         return term
     }
 
     override fun transformFieldLoadTerm(term: FieldLoadTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.field]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.field]
         return term
     }
 
@@ -172,94 +178,96 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformForAllTerm(term: ForAllTerm): Term {
-        isPrimitiveDependent[term] =
-            isPrimitiveDependent[term.start]!! || isPrimitiveDependent[term.end]!! || isPrimitiveDependent[term.body]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.start]!! || isPrimitiveDependentTerm[term.end]!! || isPrimitiveDependentTerm[term.body]!!
         return term
     }
 
     override fun transformIndexOfTerm(term: IndexOfTerm): Term {
-        isPrimitiveDependent[term] =
-            isPrimitiveDependent[term.string]!! || isPrimitiveDependent[term.substring]!! || isPrimitiveDependent[term.offset]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.string]!! || isPrimitiveDependentTerm[term.substring]!! || isPrimitiveDependentTerm[term.offset]!!
         return term
     }
 
     override fun transformInstanceOfTerm(term: InstanceOfTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformIteTerm(term: IteTerm): Term {
-        isPrimitiveDependent[term] =
-            isPrimitiveDependent[term.cond]!! || isPrimitiveDependent[term.trueValue]!! || isPrimitiveDependent[term.falseValue]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.cond]!! || isPrimitiveDependentTerm[term.trueValue]!! || isPrimitiveDependentTerm[term.falseValue]!!
         return term
     }
 
     override fun transformLambdaTerm(term: LambdaTerm): Term {
-        isPrimitiveDependent[term] = term.parameters.fold(false) { acc, cur ->
-            isPrimitiveDependent[cur]!! || acc
+        isPrimitiveDependentTerm[term] = term.parameters.fold(false) { acc, cur ->
+            isPrimitiveDependentTerm[cur]!! || acc
         }
         return term
     }
 
     override fun transformNegTerm(term: NegTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.operand]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.operand]
         return term
     }
 
     override fun transformNullTerm(term: NullTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformReturnValueTerm(term: ReturnValueTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformStartsWithTerm(term: StartsWithTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.string]!! || isPrimitiveDependent[term.prefix]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.string]!! || isPrimitiveDependentTerm[term.prefix]!!
         return term
     }
 
     override fun transformStaticClassRefTerm(term: StaticClassRefTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformStringContainsTerm(term: StringContainsTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.string]!! || isPrimitiveDependent[term.substring]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.string]!! || isPrimitiveDependentTerm[term.substring]!!
         return term
     }
 
     override fun transformStringLengthTerm(term: StringLengthTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.string]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.string]
         return term
     }
 
     override fun transformStringParseTerm(term: StringParseTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.string]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.string]
         return term
     }
 
     override fun transformSubstringTerm(term: SubstringTerm): Term {
-        isPrimitiveDependent[term] =
-            isPrimitiveDependent[term.string]!! || isPrimitiveDependent[term.offset]!! || isPrimitiveDependent[term.length]!!
+        isPrimitiveDependentTerm[term] =
+            isPrimitiveDependentTerm[term.string]!! || isPrimitiveDependentTerm[term.offset]!! || isPrimitiveDependentTerm[term.length]!!
         return term
     }
 
     override fun transformToStringTerm(term: ToStringTerm): Term {
-        isPrimitiveDependent[term] = isPrimitiveDependent[term.value]
+        isPrimitiveDependentTerm[term] = isPrimitiveDependentTerm[term.value]
         return term
     }
 
     override fun transformUndefTerm(term: UndefTerm): Term {
-        isPrimitiveDependent[term] = false
+        isPrimitiveDependentTerm[term] = false
         return term
     }
 
     override fun transformValueTerm(term: ValueTerm): Term {
-        if (term.isPrimitiveValue) isPrimitiveDependent[term] = true
-        if (isPrimitiveDependent[term] == null) isPrimitiveDependent[term] = false
+        if (term.isPrimitiveValue) isPrimitiveDependentTerm[term] = true
+        if (isPrimitiveDependentTerm[term] == null) isPrimitiveDependentTerm[term] = false
         return term
     }
 
@@ -268,94 +276,168 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     ////////////////////////////////////////////////////////////////////
 
     override fun transformArrayInitializerPredicate(predicate: ArrayInitializerPredicate): Predicate {
-        assert(predicate.arrayRef is ArrayIndexTerm)
-        isPrimitiveDependent[(predicate.arrayRef as ArrayIndexTerm).arrayRef] = isPrimitiveDependent[predicate.value]!!
-        isPrimitiveDependent[predicate.arrayRef] = isPrimitiveDependent[predicate.value]!!
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.arrayRef]!! || isPrimitiveDependentTerm[predicate.value]!!
+        } else {
+            assert(predicate.arrayRef is ArrayIndexTerm)
+            isPrimitiveDependentTerm[(predicate.arrayRef as ArrayIndexTerm).arrayRef] =
+                isPrimitiveDependentTerm[predicate.value]!!
+            isPrimitiveDependentTerm[predicate.arrayRef] = isPrimitiveDependentTerm[predicate.value]!!
+        }
         return predicate
     }
 
     override fun transformArrayStorePredicate(predicate: ArrayStorePredicate): Predicate {
-        assert(predicate.arrayRef is ArrayIndexTerm)
-        isPrimitiveDependent[(predicate.arrayRef as ArrayIndexTerm).arrayRef] = isPrimitiveDependent[predicate.value]!!
-        isPrimitiveDependent[predicate.arrayRef] = isPrimitiveDependent[predicate.value]!!
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.arrayRef]!! || isPrimitiveDependentTerm[predicate.value]!!
+        } else {
+            assert(predicate.arrayRef is ArrayIndexTerm)
+            isPrimitiveDependentTerm[(predicate.arrayRef as ArrayIndexTerm).arrayRef] =
+                isPrimitiveDependentTerm[predicate.value]!!
+            isPrimitiveDependentTerm[predicate.arrayRef] = isPrimitiveDependentTerm[predicate.value]!!
+        }
         return predicate
     }
 
     override fun transformBoundStorePredicate(predicate: BoundStorePredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformCallPredicate(predicate: CallPredicate): Predicate {
-        if (predicate.hasLhv) isPrimitiveDependent[predicate.lhv] = isPrimitiveDependent[predicate.callTerm]
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.lhv]!! || isPrimitiveDependentTerm[predicate.callTerm]!!
+        } else {
+            if (predicate.hasLhv)
+                isPrimitiveDependentTerm[predicate.lhv] = isPrimitiveDependentTerm[predicate.callTerm]
+        }
         return predicate
     }
 
     override fun transformCatchPredicate(predicate: CatchPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformDefaultSwitchPredicate(predicate: DefaultSwitchPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformEnterMonitorPredicate(predicate: EnterMonitorPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformEqualityPredicate(predicate: EqualityPredicate): Predicate {
-        if (predicate.lhv !is ConstBoolTerm) {
-            isPrimitiveDependent[predicate.lhv] = isPrimitiveDependent[predicate.rhv]
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.lhv]!! || isPrimitiveDependentTerm[predicate.rhv]!!
+        } else {
+            if (predicate.lhv !is ConstBoolTerm) {
+                isPrimitiveDependentTerm[predicate.lhv] = isPrimitiveDependentTerm[predicate.rhv]
+            }
         }
         return predicate
     }
 
     override fun transformExitMonitorPredicate(predicate: ExitMonitorPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformFieldInitializerPredicate(predicate: FieldInitializerPredicate): Predicate {
-        isPrimitiveDependent[predicate.field] = isPrimitiveDependent[predicate.value]
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.field]!! || isPrimitiveDependentTerm[predicate.field]!! || isPrimitiveDependentTerm[predicate.value]!!
+        } else {
+            isPrimitiveDependentTerm[predicate.field] = isPrimitiveDependentTerm[predicate.value]
+        }
         return predicate
     }
 
     override fun transformFieldStorePredicate(predicate: FieldStorePredicate): Predicate {
-        isPrimitiveDependent[predicate.field] = isPrimitiveDependent[predicate.value]
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.field]!! || isPrimitiveDependentTerm[predicate.value]!!
+        } else {
+            isPrimitiveDependentTerm[predicate.field] = isPrimitiveDependentTerm[predicate.value]
+        }
         return predicate
     }
 
     override fun transformGenerateArrayPredicate(predicate: GenerateArrayPredicate): Predicate {
-        isPrimitiveDependent[predicate.lhv] =
-            isPrimitiveDependent[predicate.length]!! || isPrimitiveDependent[predicate.generator]!!
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.lhv]!! || isPrimitiveDependentTerm[predicate.length]!! || isPrimitiveDependentTerm[predicate.generator]!!
+        } else {
+            isPrimitiveDependentTerm[predicate.lhv] =
+                isPrimitiveDependentTerm[predicate.length]!! || isPrimitiveDependentTerm[predicate.generator]!!
+        }
         return predicate
     }
 
     override fun transformInequalityPredicate(predicate: InequalityPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformNewArrayInitializerPredicate(predicate: NewArrayInitializerPredicate): Predicate {
-        isPrimitiveDependent[predicate.lhv] = predicate.elements.fold(false) { acc, cur ->
-            isPrimitiveDependent[cur]!! || acc
-        } || isPrimitiveDependent[predicate.length]!!
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.lhv]!! || predicate.elements.fold(
+                false
+            ) { acc, cur ->
+                isPrimitiveDependentTerm[cur]!! || acc
+            } || isPrimitiveDependentTerm[predicate.length]!!
+        } else {
+            isPrimitiveDependentTerm[predicate.lhv] = predicate.elements.fold(false) { acc, cur ->
+                isPrimitiveDependentTerm[cur]!! || acc
+            } || isPrimitiveDependentTerm[predicate.length]!!
+        }
         return predicate
     }
 
     override fun transformNewArrayPredicate(predicate: NewArrayPredicate): Predicate {
-        isPrimitiveDependent[predicate.lhv] = predicate.dimensions.fold(false) { acc, cur ->
-            isPrimitiveDependent[cur]!! || acc
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += isPrimitiveDependentTerm[predicate.lhv]!! || predicate.dimensions.fold(
+                false
+            ) { acc, cur ->
+                isPrimitiveDependentTerm[cur]!! || acc
+            }
+        } else {
+            isPrimitiveDependentTerm[predicate.lhv] = predicate.dimensions.fold(false) { acc, cur ->
+                isPrimitiveDependentTerm[cur]!! || acc
+            }
         }
         return predicate
     }
 
     override fun transformNewInitializerPredicate(predicate: NewInitializerPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformNewPredicate(predicate: NewPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 
     override fun transformThrowPredicate(predicate: ThrowPredicate): Predicate {
+        if (predicate.type == PredicateType.Path()) {
+            isPrimitiveDependentPathPredicate += false
+        }
         return predicate
     }
 }

@@ -50,9 +50,8 @@ class ScoreGuidedClauseSelector(
         val newPath = state.path.path
 
         val analysis = PrimitiveDependencyAnalysis()
-        val clausesWithoutPath = newClauses.filterNot { it is PathClause }
 
-        analysis.apply(clausesWithoutPath.toClauseState().asState())
+        analysis.apply(newClauses.toClauseState().asState())
 
         clauses.clear()
         path.clear()
@@ -94,7 +93,7 @@ class ScoreGuidedClauseSelector(
             if (clause is PathClause) {
                 stackTraces += currentStackTrace.toList()
                 assert(clause == path[pathIndex])
-                if (isPathClauseReversible(clause, analysis)) {
+                if (isPathClauseReversible(pathIndex, analysis)) {
                     candidates.add(i to pathIndex)
                 }
                 pathIndex++
@@ -111,10 +110,10 @@ class ScoreGuidedClauseSelector(
         }
     }
 
-    private fun isPathClauseReversible(clause: PathClause, analysis: PrimitiveDependencyAnalysis): Boolean {
-        return clause.type == PathClauseType.CONDITION_CHECK && clause.predicate.operands.fold(false) { acc, cur ->
-            acc || analysis.isPrimitiveDependent(cur)
-        }
+    private fun isPathClauseReversible(pathIndex: Int, analysis: PrimitiveDependencyAnalysis): Boolean {
+        return path[pathIndex].type == PathClauseType.CONDITION_CHECK && analysis.isPrimitiveDependentPathPredicate(
+            pathIndex
+        )
     }
 
     // TODO: rewrite?
