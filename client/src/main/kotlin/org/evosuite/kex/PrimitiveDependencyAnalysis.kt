@@ -2,7 +2,6 @@ package org.evosuite.kex
 
 import org.vorpal.research.kex.state.predicate.*
 import org.vorpal.research.kex.state.term.*
-import org.vorpal.research.kex.state.transformer.StensgaardAA
 import org.vorpal.research.kex.state.transformer.Token
 import org.vorpal.research.kex.state.transformer.Transformer
 import java.util.*
@@ -10,7 +9,7 @@ import java.util.*
 class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     private val isPrimitiveDependentTerm = WeakHashMap<Token, Boolean>()
     private val isPrimitiveDependentPathPredicate = mutableListOf<Boolean>()
-    private val stensgaardAA = StensgaardAA()
+    private val mustAliasAnalysis = MustAliasAnalysis()
 
     fun isPrimitiveDependentPathPredicate(index: Int): Boolean {
         assert(isPrimitiveDependentPathPredicate.size >= index)
@@ -18,7 +17,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     private val Term.isPrimitiveValue: Boolean get() = this.name.contains("%primitive%")
-    private val Term.getToken: Token? get() = stensgaardAA.get(this)
+    private val Term.getToken: Token? get() = mustAliasAnalysis.get(this)
     private val Term.isPrimitiveDependent: Boolean
         get() {
             if (isPrimitiveDependentTerm[this.getToken] == null) {
@@ -44,7 +43,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     ////////////////////////////////////////////////////////////////////
 
     override fun transformArrayLoadTerm(term: ArrayLoadTerm): Term {
-        stensgaardAA.transformArrayLoadTerm(term)
+        mustAliasAnalysis.transformArrayLoadTerm(term)
         assert(term.arrayRef is ArrayIndexTerm)
         isPrimitiveDependentTerm[term.getToken] =
             term.arrayRef.isPrimitiveDependent || (term.arrayRef as ArrayIndexTerm).arrayRef.isPrimitiveDependent
@@ -52,13 +51,13 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformArrayContainsTerm(term: ArrayContainsTerm): Term {
-        stensgaardAA.transformArrayContainsTerm(term)
+        mustAliasAnalysis.transformArrayContainsTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.value.isPrimitiveDependent || term.array.isPrimitiveDependent
         return term
     }
 
     override fun transformArrayIndexTerm(term: ArrayIndexTerm): Term {
-        stensgaardAA.transformArrayIndexTerm(term)
+        mustAliasAnalysis.transformArrayIndexTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.index.isPrimitiveDependent || term.arrayRef.isPrimitiveDependent
         return term
     }
@@ -68,50 +67,50 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformArrayLengthTerm(term: ArrayLengthTerm): Term {
-        stensgaardAA.transformArrayLengthTerm(term)
+        mustAliasAnalysis.transformArrayLengthTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformCharAtTerm(term: CharAtTerm): Term {
-        stensgaardAA.transformCharAtTerm(term)
+        mustAliasAnalysis.transformCharAtTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.index.isPrimitiveDependent || term.string.isPrimitiveDependent
         return term
     }
 
     override fun transformBinaryTerm(term: BinaryTerm): Term {
-        stensgaardAA.transformBinaryTerm(term)
+        mustAliasAnalysis.transformBinaryTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.lhv.isPrimitiveDependent || term.rhv.isPrimitiveDependent
         return term
     }
 
     override fun transformBoundTerm(term: BoundTerm): Term {
-        stensgaardAA.transformBoundTerm(term)
+        mustAliasAnalysis.transformBoundTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformCallTerm(term: CallTerm): Term {
-        stensgaardAA.transformCallTerm(term)
+        mustAliasAnalysis.transformCallTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.arguments.fold(false) { acc, cur -> cur.isPrimitiveDependent || acc } || term.owner.isPrimitiveDependent
         return term
     }
 
     override fun transformCastTerm(term: CastTerm): Term {
-        stensgaardAA.transformCastTerm(term)
+        mustAliasAnalysis.transformCastTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.operand.isPrimitiveDependent
         return term
     }
 
     override fun transformClassAccessTerm(term: ClassAccessTerm): Term {
-        stensgaardAA.transformClassAccessTerm(term)
+        mustAliasAnalysis.transformClassAccessTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.operand.isPrimitiveDependent
         return term
     }
 
     override fun transformCmpTerm(term: CmpTerm): Term {
-        stensgaardAA.transformCmpTerm(term)
+        mustAliasAnalysis.transformCmpTerm(term)
         if (term.rhv !is NullTerm) {
             isPrimitiveDependentTerm[term.getToken] = term.lhv.isPrimitiveDependent || term.rhv.isPrimitiveDependent
         } else {
@@ -121,130 +120,130 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformConcatTerm(term: ConcatTerm): Term {
-        stensgaardAA.transformConcatTerm(term)
+        mustAliasAnalysis.transformConcatTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.lhv.isPrimitiveDependent || term.rhv.isPrimitiveDependent
         return term
     }
 
     override fun transformConstBoolTerm(term: ConstBoolTerm): Term {
-        stensgaardAA.transformConstBoolTerm(term)
+        mustAliasAnalysis.transformConstBoolTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstByteTerm(term: ConstByteTerm): Term {
-        stensgaardAA.transformConstByteTerm(term)
+        mustAliasAnalysis.transformConstByteTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstCharTerm(term: ConstCharTerm): Term {
-        stensgaardAA.transformConstCharTerm(term)
+        mustAliasAnalysis.transformConstCharTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstDoubleTerm(term: ConstDoubleTerm): Term {
-        stensgaardAA.transformConstDoubleTerm(term)
+        mustAliasAnalysis.transformConstDoubleTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstIntTerm(term: ConstIntTerm): Term {
-        stensgaardAA.transformConstIntTerm(term)
+        mustAliasAnalysis.transformConstIntTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstLongTerm(term: ConstLongTerm): Term {
-        stensgaardAA.transformConstLongTerm(term)
+        mustAliasAnalysis.transformConstLongTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstFloatTerm(term: ConstFloatTerm): Term {
-        stensgaardAA.transformConstFloatTerm(term)
+        mustAliasAnalysis.transformConstFloatTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstClassTerm(term: ConstClassTerm): Term {
-        stensgaardAA.transformConstClassTerm(term)
+        mustAliasAnalysis.transformConstClassTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstStringTerm(term: ConstStringTerm): Term {
-        stensgaardAA.transformConstStringTerm(term)
+        mustAliasAnalysis.transformConstStringTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformConstShortTerm(term: ConstShortTerm): Term {
-        stensgaardAA.transformConstShortTerm(term)
+        mustAliasAnalysis.transformConstShortTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformEndsWithTerm(term: EndsWithTerm): Term {
-        stensgaardAA.transformEndsWithTerm(term)
+        mustAliasAnalysis.transformEndsWithTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.string.isPrimitiveDependent || term.suffix.isPrimitiveDependent
         return term
     }
 
     override fun transformEqualsTerm(term: EqualsTerm): Term {
-        stensgaardAA.transformEqualsTerm(term)
+        mustAliasAnalysis.transformEqualsTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.lhv.isPrimitiveDependent || term.rhv.isPrimitiveDependent
         return term
     }
 
     override fun transformExistsTerm(term: ExistsTerm): Term {
-        stensgaardAA.transformExistsTerm(term)
+        mustAliasAnalysis.transformExistsTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.start.isPrimitiveDependent || term.end.isPrimitiveDependent || term.body.isPrimitiveDependent
         return term
     }
 
     override fun transformFieldLoadTerm(term: FieldLoadTerm): Term {
-        stensgaardAA.transformFieldLoadTerm(term)
+        mustAliasAnalysis.transformFieldLoadTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.field.isPrimitiveDependent
         return term
     }
 
     override fun transformFieldTerm(term: FieldTerm): Term {
-        stensgaardAA.transformFieldTerm(term)
+        mustAliasAnalysis.transformFieldTerm(term)
         return term
     }
 
     override fun transformForAllTerm(term: ForAllTerm): Term {
-        stensgaardAA.transformForAllTerm(term)
+        mustAliasAnalysis.transformForAllTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.start.isPrimitiveDependent || term.end.isPrimitiveDependent || term.body.isPrimitiveDependent
         return term
     }
 
     override fun transformIndexOfTerm(term: IndexOfTerm): Term {
-        stensgaardAA.transformIndexOfTerm(term)
+        mustAliasAnalysis.transformIndexOfTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.string.isPrimitiveDependent || term.substring.isPrimitiveDependent || term.offset.isPrimitiveDependent
         return term
     }
 
     override fun transformInstanceOfTerm(term: InstanceOfTerm): Term {
-        stensgaardAA.transformInstanceOfTerm(term)
+        mustAliasAnalysis.transformInstanceOfTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformIteTerm(term: IteTerm): Term {
-        stensgaardAA.transformIteTerm(term)
+        mustAliasAnalysis.transformIteTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.cond.isPrimitiveDependent || term.trueValue.isPrimitiveDependent || term.falseValue.isPrimitiveDependent
         return term
     }
 
     override fun transformLambdaTerm(term: LambdaTerm): Term {
-        stensgaardAA.transformLambdaTerm(term)
+        mustAliasAnalysis.transformLambdaTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.parameters.fold(false) { acc, cur ->
             cur.isPrimitiveDependent || acc
         }
@@ -252,75 +251,75 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
     }
 
     override fun transformNegTerm(term: NegTerm): Term {
-        stensgaardAA.transformNegTerm(term)
+        mustAliasAnalysis.transformNegTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.operand.isPrimitiveDependent
         return term
     }
 
     override fun transformNullTerm(term: NullTerm): Term {
-        stensgaardAA.transformNullTerm(term)
+        mustAliasAnalysis.transformNullTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformReturnValueTerm(term: ReturnValueTerm): Term {
-        stensgaardAA.transformReturnValueTerm(term)
+        mustAliasAnalysis.transformReturnValueTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformStartsWithTerm(term: StartsWithTerm): Term {
-        stensgaardAA.transformStartsWithTerm(term)
+        mustAliasAnalysis.transformStartsWithTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.string.isPrimitiveDependent || term.prefix.isPrimitiveDependent
         return term
     }
 
     override fun transformStaticClassRefTerm(term: StaticClassRefTerm): Term {
-        stensgaardAA.transformStaticClassRefTerm(term)
+        mustAliasAnalysis.transformStaticClassRefTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformStringContainsTerm(term: StringContainsTerm): Term {
-        stensgaardAA.transformStringContainsTerm(term)
+        mustAliasAnalysis.transformStringContainsTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.string.isPrimitiveDependent || term.substring.isPrimitiveDependent
         return term
     }
 
     override fun transformStringLengthTerm(term: StringLengthTerm): Term {
-        stensgaardAA.transformStringLengthTerm(term)
+        mustAliasAnalysis.transformStringLengthTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.string.isPrimitiveDependent
         return term
     }
 
     override fun transformStringParseTerm(term: StringParseTerm): Term {
-        stensgaardAA.transformStringParseTerm(term)
+        mustAliasAnalysis.transformStringParseTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.string.isPrimitiveDependent
         return term
     }
 
     override fun transformSubstringTerm(term: SubstringTerm): Term {
-        stensgaardAA.transformSubstringTerm(term)
+        mustAliasAnalysis.transformSubstringTerm(term)
         isPrimitiveDependentTerm[term.getToken] =
             term.string.isPrimitiveDependent || term.offset.isPrimitiveDependent || term.length.isPrimitiveDependent
         return term
     }
 
     override fun transformToStringTerm(term: ToStringTerm): Term {
-        stensgaardAA.transformToStringTerm(term)
+        mustAliasAnalysis.transformToStringTerm(term)
         isPrimitiveDependentTerm[term.getToken] = term.value.isPrimitiveDependent
         return term
     }
 
     override fun transformUndefTerm(term: UndefTerm): Term {
-        stensgaardAA.transformUndefTerm(term)
+        mustAliasAnalysis.transformUndefTerm(term)
         isPrimitiveDependentTerm[term.getToken] = false
         return term
     }
 
     override fun transformValueTerm(term: ValueTerm): Term {
-        stensgaardAA.transformValueTerm(term)
+        mustAliasAnalysis.transformValueTerm(term)
         if (term.isPrimitiveValue) isPrimitiveDependentTerm[term.getToken] = true
         if (isPrimitiveDependentTerm[term.getToken] == null) isPrimitiveDependentTerm[term.getToken] = false
         return term
@@ -334,7 +333,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += predicate.arrayRef.isPrimitiveDependent || predicate.value.isPrimitiveDependent
         } else {
-            stensgaardAA.transformArrayInitializerPredicate(predicate)
+            mustAliasAnalysis.transformArrayInitializerPredicate(predicate)
             assert(predicate.arrayRef is ArrayIndexTerm)
             isPrimitiveDependentTerm[(predicate.arrayRef as ArrayIndexTerm).arrayRef.getToken] =
                 predicate.value.isPrimitiveDependent
@@ -347,7 +346,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += predicate.arrayRef.isPrimitiveDependent || predicate.value.isPrimitiveDependent
         } else {
-            stensgaardAA.transformArrayStorePredicate(predicate)
+            mustAliasAnalysis.transformArrayStorePredicate(predicate)
             assert(predicate.arrayRef is ArrayIndexTerm)
             isPrimitiveDependentTerm[(predicate.arrayRef as ArrayIndexTerm).arrayRef.getToken] =
                 predicate.value.isPrimitiveDependent
@@ -360,7 +359,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformBoundStorePredicate(predicate)
+            mustAliasAnalysis.transformBoundStorePredicate(predicate)
         }
         return predicate
     }
@@ -369,7 +368,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += (predicate.hasLhv && predicate.lhv.isPrimitiveDependent) || predicate.callTerm.isPrimitiveDependent
         } else {
-            stensgaardAA.transformCallPredicate(predicate)
+            mustAliasAnalysis.transformCallPredicate(predicate)
             if (predicate.hasLhv)
                 isPrimitiveDependentTerm[predicate.lhv.getToken] = predicate.callTerm.isPrimitiveDependent
         }
@@ -380,7 +379,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformCatchPredicate(predicate)
+            mustAliasAnalysis.transformCatchPredicate(predicate)
         }
         return predicate
     }
@@ -389,7 +388,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformDefaultSwitchPredicate(predicate)
+            mustAliasAnalysis.transformDefaultSwitchPredicate(predicate)
         }
         return predicate
     }
@@ -398,7 +397,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformEnterMonitorPredicate(predicate)
+            mustAliasAnalysis.transformEnterMonitorPredicate(predicate)
         }
         return predicate
     }
@@ -407,7 +406,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += predicate.lhv.isPrimitiveDependent || predicate.rhv.isPrimitiveDependent
         } else {
-            stensgaardAA.transformEqualityPredicate(predicate)
+            mustAliasAnalysis.transformEqualityPredicate(predicate)
             if (predicate.lhv !is ConstBoolTerm) {
                 isPrimitiveDependentTerm[predicate.lhv.getToken] = predicate.rhv.isPrimitiveDependent
             }
@@ -419,7 +418,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformExitMonitorPredicate(predicate)
+            mustAliasAnalysis.transformExitMonitorPredicate(predicate)
         }
         return predicate
     }
@@ -428,7 +427,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += predicate.field.isPrimitiveDependent || predicate.value.isPrimitiveDependent
         } else {
-            stensgaardAA.transformFieldInitializerPredicate(predicate)
+            mustAliasAnalysis.transformFieldInitializerPredicate(predicate)
             isPrimitiveDependentTerm[predicate.field.getToken] = predicate.value.isPrimitiveDependent
         }
         return predicate
@@ -438,7 +437,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += predicate.field.isPrimitiveDependent || predicate.value.isPrimitiveDependent
         } else {
-            stensgaardAA.transformFieldStorePredicate(predicate)
+            mustAliasAnalysis.transformFieldStorePredicate(predicate)
             isPrimitiveDependentTerm[predicate.field.getToken] = predicate.value.isPrimitiveDependent
         }
         return predicate
@@ -448,7 +447,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += predicate.lhv.isPrimitiveDependent || predicate.length.isPrimitiveDependent || predicate.generator.isPrimitiveDependent
         } else {
-            stensgaardAA.transformGenerateArrayPredicate(predicate)
+            mustAliasAnalysis.transformGenerateArrayPredicate(predicate)
             isPrimitiveDependentTerm[predicate.lhv.getToken] =
                 predicate.length.isPrimitiveDependent || predicate.generator.isPrimitiveDependent
         }
@@ -459,7 +458,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformInequalityPredicate(predicate)
+            mustAliasAnalysis.transformInequalityPredicate(predicate)
         }
         return predicate
     }
@@ -470,7 +469,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
                 cur.isPrimitiveDependent || acc
             } || predicate.length.isPrimitiveDependent
         } else {
-            stensgaardAA.transformNewArrayInitializerPredicate(predicate)
+            mustAliasAnalysis.transformNewArrayInitializerPredicate(predicate)
             isPrimitiveDependentTerm[predicate.lhv.getToken] = predicate.elements.fold(false) { acc, cur ->
                 cur.isPrimitiveDependent || acc
             } || predicate.length.isPrimitiveDependent
@@ -484,7 +483,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
                 cur.isPrimitiveDependent || acc
             }
         } else {
-            stensgaardAA.transformNewArrayPredicate(predicate)
+            mustAliasAnalysis.transformNewArrayPredicate(predicate)
             isPrimitiveDependentTerm[predicate.lhv.getToken] = predicate.dimensions.fold(false) { acc, cur ->
                 cur.isPrimitiveDependent || acc
             }
@@ -496,7 +495,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformNewInitializerPredicate(predicate)
+            mustAliasAnalysis.transformNewInitializerPredicate(predicate)
         }
         return predicate
     }
@@ -505,7 +504,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformNewPredicate(predicate)
+            mustAliasAnalysis.transformNewPredicate(predicate)
         }
         return predicate
     }
@@ -514,7 +513,7 @@ class PrimitiveDependencyAnalysis : Transformer<PrimitiveDependencyAnalysis> {
         if (predicate.type == PredicateType.Path()) {
             isPrimitiveDependentPathPredicate += false
         } else {
-            stensgaardAA.transformThrowPredicate(predicate)
+            mustAliasAnalysis.transformThrowPredicate(predicate)
         }
         return predicate
     }
