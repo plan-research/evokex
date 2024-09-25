@@ -52,6 +52,8 @@ public class DynaMOSA extends AbstractMOSA {
 	protected CrowdingDistance<TestChromosome> distance = new CrowdingDistance<>();
 
 	private boolean wasTargeted;
+	private int stallLen;
+	private int maxStallLen = 32;
 
 	/**
 	 * Constructor based on the abstract class {@link AbstractMOSA}.
@@ -65,6 +67,14 @@ public class DynaMOSA extends AbstractMOSA {
 	/** {@inheritDoc} */
 	@Override
 	protected void evolve() {
+		if (stallLen > maxStallLen) {
+			stallLen = 0;
+			wasTargeted = true;
+			TestChromosome.enableConcolic = true;
+		} else {
+			TestChromosome.enableConcolic = false;
+		}
+
 		// Generate offspring, compute their fitness, update the archive and coverage goals.
 		TestChromosome.reset();
 		List<TestChromosome> offspringPopulation = this.breedNextGeneration();
@@ -198,6 +208,7 @@ public class DynaMOSA extends AbstractMOSA {
 
 		// Evolve the population generation by generation until all gaols have been covered or the
 		// search budget has been consumed.
+		stallLen = 0;
 		long startTime = System.currentTimeMillis();
 		int iterations = 0;
 		int kexIterations = 0;
@@ -224,6 +235,16 @@ public class DynaMOSA extends AbstractMOSA {
 				} else {
 					statLogger.debug("Dump kex iteration");
 				}
+			}
+
+			if (oldCoverage == newCoverage) {
+				if (wasTargeted) {
+					maxStallLen *= 2;
+				} else {
+					stallLen++;
+				}
+			} else {
+				stallLen = 0;
 			}
 
 			iterations++;

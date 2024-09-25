@@ -74,6 +74,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	public static int timeOfUnsat = 0;
 	public static int timeOfSat = 0;
 	public static int numberOfKexCalls = 0;
+	public static boolean enableConcolic = false;
 	public static void reset() {
 		numberOfCovered = 0;
 		numberOfCollected = 0;
@@ -490,7 +491,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		double pl = 1d / (lastMutatableStatement + 1);
 		TestFactory testFactory = TestFactory.getInstance();
 
-		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION) {
+		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION && enableConcolic) {
 			numberOfConcolic += 1;
 			long time = System.currentTimeMillis();
 			try {
