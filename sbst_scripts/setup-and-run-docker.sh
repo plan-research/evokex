@@ -15,7 +15,7 @@ TIME_BUDGET=$4
 TOOL_NAME=$(basename "$TOOL_HOME")
 DOCKER_TOOL_HOME=/home/$TOOL_NAME
 
-docker run --rm -d \
+docker run --platform linux/amd64 --rm -d \
   -v "$TOOL_HOME":"$DOCKER_TOOL_HOME" \
   -v "$BENCH_PATH":/var/benchmarks \
   --name="$TOOL_NAME" \

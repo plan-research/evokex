@@ -19,6 +19,7 @@
  */
 package org.evosuite.testcase;
 
+import kotlin.jvm.functions.Function0;
 import org.evosuite.Properties;
 import org.evosuite.coverage.mutation.Mutation;
 import org.evosuite.coverage.mutation.MutationExecutionResult;
@@ -26,11 +27,8 @@ import org.evosuite.ga.ConstructionFailedException;
 import org.evosuite.ga.SecondaryObjective;
 import org.evosuite.ga.localsearch.LocalSearchObjective;
 import org.evosuite.ga.operators.mutation.MutationHistory;
+import org.evosuite.kex.KexTestGenerator;
 import org.evosuite.runtime.util.AtMostOnceLogger;
-import org.evosuite.setup.TestCluster;
-import org.evosuite.symbolic.BranchCondition;
-import org.evosuite.symbolic.ConcolicExecution;
-import org.evosuite.symbolic.ConcolicMutation;
 import org.evosuite.testcase.execution.ExecutionResult;
 import org.evosuite.testcase.localsearch.TestCaseLocalSearch;
 import org.evosuite.testcase.statements.FunctionalMockStatement;
@@ -41,7 +39,6 @@ import org.evosuite.testsuite.AbstractTestSuiteChromosome;
 import org.evosuite.testsuite.TestSuiteChromosome;
 import org.evosuite.testsuite.TestSuiteFitnessFunction;
 import org.evosuite.utils.Randomness;
-import org.evosuite.utils.generic.GenericAccessibleObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,8 +52,6 @@ import java.util.stream.Collector;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static java.util.stream.Collectors.toCollection;
-
 /**
  * Chromosome representation of test cases
  *
@@ -64,6 +59,38 @@ import static java.util.stream.Collectors.toCollection;
  *
  */
 public final class TestChromosome extends AbstractTestChromosome<TestChromosome>  {
+
+	public static int numberOfMutations = 0;
+	public static int numberOfCollected = 0;
+	public static int numberOfTimeouts = 0;
+	public static int numberOfConcolic = 0;
+	public static int numberOfSuccessConcolic = 0;
+	public static int totalAmountOfTimeConcolic = 0;
+	public static int numberOfIrreversibleConcolic = 0;
+	public static int numberOfCovered = 0;
+	public static int[] numberOfUnsupported = {0, 0};
+	public static int numberOfUnsat = 0;
+	public static int numberOfSat = 0;
+	public static int timeOfUnsat = 0;
+	public static int timeOfSat = 0;
+	public static int numberOfKexCalls = 0;
+	public static boolean enableConcolic = false;
+	public static void reset() {
+		numberOfCovered = 0;
+		numberOfCollected = 0;
+		numberOfTimeouts = 0;
+		numberOfMutations = 0;
+		numberOfConcolic = 0;
+		numberOfSuccessConcolic = 0;
+		totalAmountOfTimeConcolic = 0;
+		numberOfIrreversibleConcolic = 0;
+		numberOfKexCalls = 0;
+		numberOfUnsupported = new int[]{0, 0};
+		numberOfUnsat = 0;
+		numberOfSat = 0;
+		timeOfUnsat = 0;
+		timeOfSat = 0;
+	}
 
 	private static final long serialVersionUID = 7532366007973252782L;
 
@@ -284,6 +311,8 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	 */
 	@Override
 	public void mutate() {
+		numberOfMutations += 1;
+
 		boolean changed = false;
 		mutationHistory.clear();
 
@@ -462,13 +491,17 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 		double pl = 1d / (lastMutatableStatement + 1);
 		TestFactory testFactory = TestFactory.getInstance();
 
-		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION) {
+		if (Randomness.nextDouble() < Properties.CONCOLIC_MUTATION && enableConcolic) {
+			numberOfConcolic += 1;
+			long time = System.currentTimeMillis();
 			try {
 				changed = mutationConcolic();
 			} catch (Exception exc) {
 				logger.warn("Encountered exception when trying to use concolic mutation: {}", exc.getMessage());
 				logger.debug("Detailed exception trace: ", exc);
 			}
+			totalAmountOfTimeConcolic += System.currentTimeMillis() - time;
+			numberOfSuccessConcolic += changed ? 1 : 0;
 		}
 
 		if (!changed) {
@@ -548,32 +581,11 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 	 */
 	private boolean mutationConcolic() {
 		logger.info("Applying DSE mutation");
-		// concolicExecution = new ConcolicExecution();
+		long currentTime = System.currentTimeMillis();
+		Function0<Boolean> stoppingCondition = () -> System.currentTimeMillis() - currentTime >
+				KexTestGenerator.KEX_GENERATION_TIMEOUT;
 
-		// Apply DSE to gather constraints
-		List<BranchCondition> branches = ConcolicExecution.getSymbolicPath(this);
-		logger.debug("Conditions: " + branches);
-		if (branches.isEmpty())
-			return false;
-
-		boolean mutated = false;
-
-		List<BranchCondition> targetBranches = branches.stream()
-				.filter(b -> TestCluster.isTargetClassName(b.getClassName()))
-				.collect(toCollection(ArrayList::new));
-
-		// Select random branch
-		List<BranchCondition> bs = targetBranches.isEmpty() ? branches : targetBranches;
-		BranchCondition branch =  Randomness.choice(bs);
-
-		logger.debug("Trying to negate branch " + branch.getInstructionIndex()
-		        + " - have " + targetBranches.size() + "/" + branches.size()
-		        + " target branches");
-
-		// Try to solve negated constraint
-		TestCase newTest = ConcolicMutation.negateCondition(branches, branch, test);
-
-		// If successful, add resulting test to test suite
+		TestCase newTest = KexTestGenerator.INSTANCE.generateTest(this, stoppingCondition);
 		if (newTest != null) {
 			logger.debug("CONCOLIC: Created new test");
 			// logger.info(newTest.toCode());
@@ -586,7 +598,7 @@ public final class TestChromosome extends AbstractTestChromosome<TestChromosome>
 			logger.debug("CONCOLIC: Did not create new test");
 		}
 
-		return mutated;
+		return newTest != null;
 	}
 
 	/**

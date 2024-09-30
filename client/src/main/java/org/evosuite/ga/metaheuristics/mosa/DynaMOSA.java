@@ -19,7 +19,6 @@
  */
 package org.evosuite.ga.metaheuristics.mosa;
 
-import kotlin.jvm.functions.Function0;
 import org.evosuite.Properties;
 import org.evosuite.coverage.line.LineCoverageTestFitness;
 import org.evosuite.ga.ChromosomeFactory;
@@ -27,15 +26,11 @@ import org.evosuite.ga.comparators.OnlyCrowdingComparator;
 import org.evosuite.ga.metaheuristics.mosa.structural.MultiCriteriaManager;
 import org.evosuite.ga.operators.ranking.CrowdingDistance;
 import org.evosuite.kex.KexTestGenerator;
-import org.evosuite.testcase.TestCase;
-import org.evosuite.testcase.TestChromosome;
+import org.evosuite.testcase.*;
 import org.evosuite.utils.LoggingUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * Implementation of the DynaMOSA (Many Objective Sorting Algorithm) described in the paper
@@ -56,13 +51,9 @@ public class DynaMOSA extends AbstractMOSA {
 
 	protected CrowdingDistance<TestChromosome> distance = new CrowdingDistance<>();
 
+	private boolean wasTargeted;
 	private int stallLen;
 	private int maxStallLen = 32;
-	private boolean wasTargeted;
-	private final int maxGenerateTests = 5;
-	private final long kexExecutionTimeout = 5000;
-	private final long kexGenerationTimeout = 5000;
-	private KexTestGenerator kexTestGenerator;
 
 	/**
 	 * Constructor based on the abstract class {@link AbstractMOSA}.
@@ -76,72 +67,42 @@ public class DynaMOSA extends AbstractMOSA {
 	/** {@inheritDoc} */
 	@Override
 	protected void evolve() {
-		List<TestChromosome> additional = Collections.emptyList();
 		if (stallLen > maxStallLen) {
-			logger.info("Run test generation using kex");
 			stallLen = 0;
 			wasTargeted = true;
-
-			additional = new ArrayList<>();
-
-			logger.info("Constraints collection");
-			long startTime = System.currentTimeMillis();
-			List<TestChromosome> solutions = getSolutions();
-			statLogger.debug("Current solutions: {}", solutions.size());
-//			statLogger.debug("-----------------------");
-//			for (TestChromosome solution : solutions) {
-//				statLogger.debug(solution.toString());
-//				statLogger.debug("-----------------------");
-//			}
-			kexTestGenerator.collectTraces(
-					solutions,
-					() -> System.currentTimeMillis() - startTime > kexExecutionTimeout
-			);
-			long endExecutionTime = System.currentTimeMillis();
-
-			logger.info("Start generation");
-			Function0<Boolean> stoppingCondition =
-					() -> System.currentTimeMillis() - endExecutionTime > kexGenerationTimeout;
-			int i = 0;
-			while (maxGenerateTests == -1 || i < maxGenerateTests) {
-				TestCase testCase = kexTestGenerator.generateTest(stoppingCondition);
-				if (testCase == null) {
-					break;
-				}
-				TestChromosome test = new TestChromosome();
-				test.setTestCase(testCase);
-				additional.add(test);
-				calculateFitness(test);
-				logger.debug("Covered goals: {}", testCase.getCoveredGoals().size());
-				i++;
-			}
-			long endTime = System.currentTimeMillis();
-			statLogger.debug("Test cases generated: {}", additional.size());
-//			statLogger.debug("---------------------");
-//			for (TestChromosome test: additional) {
-//				statLogger.debug(test.toString());
-//				statLogger.debug("----------------------");
-//			}
-
-			statLogger.debug("Kex generation time: {}", endTime - endExecutionTime);
-			statLogger.debug("Kex execution time: {}", endExecutionTime - startTime);
-			statLogger.debug("Kex iteration time: {}", endTime - startTime);
-
-			if (additional.isEmpty()) {
-				return;
-			}
-
-			List<TestChromosome> temp = additional;
-			additional = this.population;
-			this.population = temp;
+			TestChromosome.enableConcolic = true;
+		} else {
+			TestChromosome.enableConcolic = false;
 		}
 
 		// Generate offspring, compute their fitness, update the archive and coverage goals.
+		TestChromosome.reset();
 		List<TestChromosome> offspringPopulation = this.breedNextGeneration();
+		statLogger.debug("Concolic mutation: ================== {} ==================", this.getAge());
+		statLogger.debug("Concolic mutation: Number of total mutations: {}", TestChromosome.numberOfMutations);
+		statLogger.debug("Concolic mutation: Number of collected tests before concolic mutations: {}", TestChromosome.numberOfCollected);
+		statLogger.debug("Concolic mutation: Number of concolic mutations: {}", TestChromosome.numberOfConcolic);
+		statLogger.debug("Concolic mutation: Number of success concolic mutations: {}", TestChromosome.numberOfSuccessConcolic);
+		statLogger.debug("Concolic mutation: Number of timeout for concolic mutation: {}", TestChromosome.numberOfTimeouts);
+		statLogger.debug("Concolic mutation: Total time for concolic mutation: {}", TestChromosome.totalAmountOfTimeConcolic);
+		statLogger.debug("Concolic mutation: Number of irreversible for concolic mutation: {}", TestChromosome.numberOfIrreversibleConcolic);
+		statLogger.debug("Concolic mutation: Number of unsupported tests for concolic mutation (mocks): {}", TestChromosome.numberOfUnsupported[0]);
+		statLogger.debug("Concolic mutation: Number of unsupported tests for concolic mutation (EnviromentDataStatement): {}", TestChromosome.numberOfUnsupported[1]);
+		statLogger.debug("Concolic mutation: Number of covered tests before concolic mutation: {}", TestChromosome.numberOfCovered);
+		statLogger.debug("Concolic mutation: Number of unsats concolic mutation: {}", TestChromosome.numberOfUnsat);
+		statLogger.debug("Concolic mutation: Number of sats concolic mutation: {}", TestChromosome.numberOfSat);
+		statLogger.debug("Concolic mutation: Total time for of unsats concolic mutation: {}", TestChromosome.timeOfUnsat);
+		statLogger.debug("Concolic mutation: Total time for of sats concolic mutation: {}", TestChromosome.timeOfSat);
+		statLogger.debug("Concolic mutation: Number of Kex calls: {}", TestChromosome.numberOfKexCalls);
+
+		long currentTime = System.currentTimeMillis();
+		KexTestGenerator.INSTANCE.collectTraces(
+				offspringPopulation,
+				() -> System.currentTimeMillis() - currentTime > KexTestGenerator.KEX_EXECUTION_TIMEOUT
+		);
 
 		// Create the union of parents and offspring
-		List<TestChromosome> union = new ArrayList<>(additional.size() + this.population.size() + offspringPopulation.size());
-		union.addAll(additional);
+		List<TestChromosome> union = new ArrayList<>(this.population.size() + offspringPopulation.size());
 		union.addAll(this.population);
 		union.addAll(offspringPopulation);
 
@@ -227,6 +188,11 @@ public class DynaMOSA extends AbstractMOSA {
 			// Initialize the population by creating solutions at random.
 			this.initializePopulation();
 		}
+		long currentTime = System.currentTimeMillis();
+		KexTestGenerator.INSTANCE.collectTraces(
+				this.population,
+				() -> System.currentTimeMillis() - currentTime > KexTestGenerator.KEX_EXECUTION_TIMEOUT
+		);
 
 		// Compute the fitness for each population member, update the coverage information and the
 		// set of goals to cover. Finally, update the archive.
@@ -247,7 +213,6 @@ public class DynaMOSA extends AbstractMOSA {
 		int iterations = 0;
 		int kexIterations = 0;
 		int kexImproveIterations = 0;
-		kexTestGenerator = new KexTestGenerator();
 		while (!isFinished() && getNumberOfUncoveredGoals() > 0) {
 			wasTargeted = false;
 			long oldCoverage = getLineCoverage();
@@ -274,7 +239,6 @@ public class DynaMOSA extends AbstractMOSA {
 
 			if (oldCoverage == newCoverage) {
 				if (wasTargeted) {
-//					maxGenerateTests *= 2;
 					maxStallLen *= 2;
 				} else {
 					stallLen++;
